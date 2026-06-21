@@ -1,4 +1,4 @@
-# Sorigami
+# Sorigamis
 
 A cross-platform Flutter mobile app (Android + iOS) that records conversations and routes them through an AI pipeline to produce speaker-attributed transcripts, summaries, and action items.
 
@@ -29,7 +29,7 @@ The app is a thin client: it records locally, uploads audio to Google Drive, and
 
 ```
 ┌─────────────────────────────────────────────┐
-│              Sorigami (Flutter)             │
+│              Sorigamis (Flutter)             │
 │  UI Layer     Screens + Widgets (Riverpod)  │
 │  Domain       Use cases, entities           │
 │  Data         Repos, local DB, API clients  │
@@ -74,5 +74,5 @@ test/         Test suite (mirrors lib/)
 
 ## Design Docs
 
-- [Design Spec](docs/superpowers/specs/2026-06-21-sorigami-design.md)
-- [Milestone 1 Implementation Plan](docs/superpowers/plans/2026-06-21-sorigami-milestone-1.md)
+- [Design Spec](docs/superpowers/specs/2026-06-21-sorigamis-design.md)
+- [Milestone 1 Implementation Plan](docs/superpowers/plans/2026-06-21-sorigamis-milestone-1.md)

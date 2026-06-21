@@ -1,4 +1,4 @@
-# Sorigami — Mobile App Design Spec
+# Sorigamis — Mobile App Design Spec
 **Date:** 2026-06-21  
 **Status:** Approved
 
@@ -6,7 +6,7 @@
 
 ## 1. Overview
 
-Sorigami is a cross-platform mobile app (Android + iOS) that records conversations and routes them through an AI pipeline to produce speaker-attributed transcripts, summaries, and action items. The core interaction model is **Modes** — named recording contexts (e.g. "Team Meeting", "Sales Call") that bundle AI Skills and apply them automatically. Users pick a Mode once, hit Record, and get back structured results without configuring anything per recording.
+Sorigamis is a cross-platform mobile app (Android + iOS) that records conversations and routes them through an AI pipeline to produce speaker-attributed transcripts, summaries, and action items. The core interaction model is **Modes** — named recording contexts (e.g. "Team Meeting", "Sales Call") that bundle AI Skills and apply them automatically. Users pick a Mode once, hit Record, and get back structured results without configuring anything per recording.
 
 The app is a thin client: it records, stores metadata, backs up audio to the user's cloud (Google Drive), and triggers the AI pipeline. All AI computation happens in the pipeline, not on the device.
 
@@ -14,7 +14,7 @@ The app is a thin client: it records, stores metadata, backs up audio to the use
 
 A working local pipeline already exists at `scripts/test_audio_diarize.py` in the SoriNote repo. It performs **Stage 1** processing: ffmpeg transcode → faster-whisper ASR (word timestamps) → pyannote speaker diarization → ECAPA-TDNN centroid re-assignment, producing a speaker-attributed transcript. It is multilingual (Korean + English) and CPU/MPS-capable. The **Stage 2** multi-agent step (summary / task / decision extraction) is new pipeline work.
 
-Long-term, Sorigami grows beyond Fixli's internal productivity tool into a broader AX/AI work orchestration platform.
+Long-term, Sorigamis grows beyond Fixli's internal productivity tool into a broader AX/AI work orchestration platform.
 
 ### Target Users
 
@@ -80,7 +80,7 @@ Stand up the real pipeline and wire the app to it:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   Sorigami (Flutter)                 │  ← Milestone 1
+│                   Sorigamis (Flutter)                 │  ← Milestone 1
 │                                                     │
 │  UI Layer        Screens + Widgets (Riverpod)       │
 │  Domain Layer    Use cases, entities, interfaces    │
@@ -114,7 +114,7 @@ Stand up the real pipeline and wire the app to it:
 
 ## 4. Modes & Skills System
 
-This is the central design concept of Sorigami.
+This is the central design concept of Sorigamis.
 
 ### Concepts
 
@@ -148,7 +148,7 @@ A Skill describes **user intent**, not pipeline internals. The app stores stable
 **Transcription intent** (what to transcribe, not how):
 - `language` — `auto | ko | en | ...` (spoken language; `auto` = let the pipeline detect)
 - `identifySpeakers` — Bool; "tell me who said what" (the pipeline decides how — diarization, speaker count, etc.)
-- `vocabularyHints` — `List<String>`; domain terms to recognize accurately, e.g. `["Fixli", "OKR", "Sorigami"]`
+- `vocabularyHints` — `List<String>`; domain terms to recognize accurately, e.g. `["Fixli", "OKR", "Sorigamis"]`
 
 **Output intent** (what to produce from the transcript):
 - `outputType` — `summary | tasks | both | custom`

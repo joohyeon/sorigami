@@ -1,8 +1,8 @@
-# Sorigami Milestone 1 (Mobile App) Implementation Plan
+# Sorigamis Milestone 1 (Mobile App) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the complete Sorigami Flutter app — record → metadata/Modes → Google Drive upload → trigger pipeline → view results — with the AI pipeline backed by a mock client so the whole UX is buildable and demoable without any real AI.
+**Goal:** Build the complete Sorigamis Flutter app — record → metadata/Modes → Google Drive upload → trigger pipeline → view results — with the AI pipeline backed by a mock client so the whole UX is buildable and demoable without any real AI.
 
 **Architecture:** Flutter + Riverpod, clean 3-layer (UI → domain → data). Drift (SQLite) for offline-first storage. Firebase Auth for Google sign-in. The pipeline is reached through a `PipelineClient` interface whose Milestone 1 implementation is a `MockPipelineClient` returning canned transcripts/skill results. Repositories abstract data sources so the mock swaps for the live client in M2 with no UI change.
 
@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- App name: **Sorigami** (verbatim, in all UI strings, package display name)
+- App name: **Sorigamis** (verbatim, in all UI strings, package display name)
 - Platforms: **Android + iOS** (Flutter single codebase)
 - Pipeline contract is **fixed** (spec §8): `GET /health`, `POST /jobs`, `GET /jobs/:id`, `GET /jobs/:id/result`. M1 implements `PipelineClient` as a mock; do not change the contract.
 - Skill model is **pipeline-agnostic** (spec §10): intent fields (`language`, `identifySpeakers`, `vocabularyHints`, `outputType`, `focusArea`, `tone`, `outputLanguage`, `additionalInstructions`) + opaque `pipelineParams` map. The app never interprets `pipelineParams`.
@@ -79,7 +79,7 @@ test/
 - Create: platform folders via `flutter create`
 
 **Interfaces:**
-- Produces: a runnable Flutter app shell `SorigamiApp` (a `StatelessWidget` returning `MaterialApp`).
+- Produces: a runnable Flutter app shell `SorigamisApp` (a `StatelessWidget` returning `MaterialApp`).
 
 - [ ] **Step 1: Verify Flutter is installed**
 
@@ -88,9 +88,9 @@ Expected: Flutter 3.x / Dart 3.x printed. If "command not found", install Flutte
 
 - [ ] **Step 2: Scaffold the project**
 
-Run from `/Users/hyeonjoo/VSCodeTestProjects/sorigami`:
+Run from `/Users/hyeonjoo/VSCodeTestProjects/sorigamis`:
 ```bash
-flutter create --org com.fixli --project-name sorigami --platforms=android,ios .
+flutter create --org com.fixli --project-name sorigamis --platforms=android,ios .
 ```
 Expected: `lib/`, `android/`, `ios/`, `pubspec.yaml` created alongside the existing `docs/`.
 
@@ -124,15 +124,15 @@ linter:
 ```dart
 import 'package:flutter/material.dart';
 
-class SorigamiApp extends StatelessWidget {
-  const SorigamiApp({super.key});
+class SorigamisApp extends StatelessWidget {
+  const SorigamisApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sorigami',
+      title: 'Sorigamis',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      home: const Scaffold(body: Center(child: Text('Sorigami'))),
+      home: const Scaffold(body: Center(child: Text('Sorigamis'))),
     );
   }
 }
@@ -146,20 +146,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
 
 void main() {
-  runApp(const ProviderScope(child: SorigamiApp()));
+  runApp(const ProviderScope(child: SorigamisApp()));
 }
 ```
 
 - [ ] **Step 7: Run the app to verify it boots**
 
 Run: `flutter run -d <device>` (or `flutter test` smoke once tests exist)
-Expected: app shows "Sorigami" centered. Stop the app.
+Expected: app shows "Sorigamis" centered. Stop the app.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add -A
-git commit -m "chore: scaffold Sorigami Flutter app with dependencies"
+git commit -m "chore: scaffold Sorigamis Flutter app with dependencies"
 ```
 
 ---
@@ -177,7 +177,7 @@ git commit -m "chore: scaffold Sorigami Flutter app with dependencies"
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/core/enums.dart';
+import 'package:sorigamis/core/enums.dart';
 
 void main() {
   test('JobStatus round-trips through name', () {
@@ -248,7 +248,7 @@ git commit -m "feat: add core status/output enums with name round-trip"
 ```dart
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
+import 'package:sorigamis/data/db/database.dart';
 
 void main() {
   late AppDatabase db;
@@ -436,7 +436,7 @@ git commit -m "feat: add Drift schema for recordings, skills, modes, settings"
 ```dart
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
+import 'package:sorigamis/data/db/database.dart';
 
 void main() {
   late AppDatabase db;
@@ -564,7 +564,7 @@ git commit -m "feat: add RecordingDao with status updates and result storage"
 ```dart
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
+import 'package:sorigamis/data/db/database.dart';
 
 void main() {
   late AppDatabase db;
@@ -737,8 +737,8 @@ git commit -m "feat: add Skill, Mode, and Settings DAOs"
 ```dart
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/data/seed/seed_data.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/data/seed/seed_data.dart';
 
 void main() {
   late AppDatabase db;
@@ -857,7 +857,7 @@ git commit -m "feat: seed 5 modes and their skills on first run"
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/pipeline/pipeline_client.dart';
+import 'package:sorigamis/data/pipeline/pipeline_client.dart';
 
 void main() {
   test('SkillRequest.toJson includes pipeline_params passthrough', () {
@@ -1011,8 +1011,8 @@ git commit -m "feat: define PipelineClient contract and DTOs"
 ```dart
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/pipeline/mock_pipeline_client.dart';
-import 'package:sorigami/data/pipeline/pipeline_client.dart';
+import 'package:sorigamis/data/pipeline/mock_pipeline_client.dart';
+import 'package:sorigamis/data/pipeline/pipeline_client.dart';
 
 JobSubmission sub() => JobSubmission(
       recordingId: 'r1', audioFilePath: '/a.m4a', audioDurationS: 60,
@@ -1153,9 +1153,9 @@ git commit -m "feat: add MockPipelineClient for Milestone 1"
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/data/seed/seed_data.dart';
-import 'package:sorigami/domain/models/skill_resolution.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/data/seed/seed_data.dart';
+import 'package:sorigamis/domain/models/skill_resolution.dart';
 
 void main() {
   late AppDatabase db;
@@ -1274,9 +1274,9 @@ git commit -m "feat: resolve skills for a recording per contract order"
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/data/pipeline/pipeline_client.dart';
-import 'package:sorigami/providers/providers.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/data/pipeline/pipeline_client.dart';
+import 'package:sorigamis/providers/providers.dart';
 
 void main() {
   test('daos and pipeline client resolve from container', () {
@@ -1342,13 +1342,13 @@ git commit -m "feat: wire Riverpod providers for db, daos, pipeline"
 - Test: `test/data/db/open_connection_test.dart`
 
 **Interfaces:**
-- Produces: `LazyDatabase openConnection()` opening a file `sorigami.sqlite` under the app documents dir. `main()` constructs `AppDatabase(openConnection())`, runs `seedIfEmpty`, and overrides `databaseProvider`.
+- Produces: `LazyDatabase openConnection()` opening a file `sorigamis.sqlite` under the app documents dir. `main()` constructs `AppDatabase(openConnection())`, runs `seedIfEmpty`, and overrides `databaseProvider`.
 
 - [ ] **Step 1: Write the failing test (helper exists and returns an executor)**
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/open_connection.dart';
+import 'package:sorigamis/data/db/open_connection.dart';
 
 void main() {
   test('openConnection returns a non-null executor', () {
@@ -1375,7 +1375,7 @@ import 'package:path_provider/path_provider.dart';
 LazyDatabase openConnection() {
   return LazyDatabase(() async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dir.path, 'sorigami.sqlite'));
+    final file = File(p.join(dir.path, 'sorigamis.sqlite'));
     return NativeDatabase.createInBackground(file);
   });
 }
@@ -1403,7 +1403,7 @@ Future<void> main() async {
   await seedIfEmpty(db);
   runApp(ProviderScope(
     overrides: [databaseProvider.overrideWithValue(db)],
-    child: const SorigamiApp(),
+    child: const SorigamisApp(),
   ));
 }
 ```
@@ -1444,7 +1444,7 @@ Expected: `lib/firebase_options.dart` exists.
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:sorigami/data/auth/auth_service.dart';
+import 'package:sorigamis/data/auth/auth_service.dart';
 
 class _MockAuth extends Mock implements FirebaseAuth {}
 class _MockUser extends Mock implements User {}
@@ -1548,8 +1548,8 @@ git commit -m "feat: add Firebase Auth with Google sign-in"
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/app.dart';
-import 'package:sorigami/providers/providers.dart';
+import 'package:sorigamis/app.dart';
+import 'package:sorigamis/providers/providers.dart';
 import 'helpers/test_db.dart'; // see Task 13 step 3
 
 void main() {
@@ -1557,7 +1557,7 @@ void main() {
     final db = makeTestDb();
     await tester.pumpWidget(ProviderScope(
       overrides: [databaseProvider.overrideWithValue(db)],
-      child: const SorigamiApp(),
+      child: const SorigamisApp(),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Sign in with Google'), findsOneWidget);
@@ -1570,7 +1570,7 @@ void main() {
 Create `test/core/helpers/test_db.dart`:
 ```dart
 import 'package:drift/native.dart';
-import 'package:sorigami/data/db/database.dart';
+import 'package:sorigamis/data/db/database.dart';
 
 AppDatabase makeTestDb() => AppDatabase(NativeDatabase.memory());
 ```
@@ -1623,8 +1623,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router.dart';
 import 'providers/providers.dart';
 
-class SorigamiApp extends ConsumerWidget {
-  const SorigamiApp({super.key});
+class SorigamisApp extends ConsumerWidget {
+  const SorigamisApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1633,7 +1633,7 @@ class SorigamiApp extends ConsumerWidget {
     final auth = ref.watch(authServiceProvider);
     ref.watch(_authSyncProvider);
     return MaterialApp.router(
-      title: 'Sorigami',
+      title: 'Sorigamis',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
       routerConfig: ref.watch(routerProvider),
     );
@@ -1738,7 +1738,7 @@ git commit -m "feat: add router with auth gate and placeholder screens"
 ```dart
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/features/onboarding/permissions_screen.dart';
+import 'package:sorigamis/features/onboarding/permissions_screen.dart';
 
 void main() {
   testWidgets('shows microphone permission prompt', (tester) async {
@@ -1766,13 +1766,13 @@ class PermissionsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Welcome to Sorigami')),
+      appBar: AppBar(title: const Text('Welcome to Sorigamis')),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('Sorigami needs your microphone to record conversations.'),
+            const Text('Sorigamis needs your microphone to record conversations.'),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () async {
@@ -1814,7 +1814,7 @@ Android — in `android/app/src/main/AndroidManifest.xml` add inside `<manifest>
 iOS — in `ios/Runner/Info.plist` add:
 ```xml
 <key>NSMicrophoneUsageDescription</key>
-<string>Sorigami records meetings to transcribe and summarize them.</string>
+<string>Sorigamis records meetings to transcribe and summarize them.</string>
 ```
 
 - [ ] **Step 7: Commit**
@@ -1842,7 +1842,7 @@ git commit -m "feat: add permissions screen and platform mic declarations"
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:record/record.dart';
-import 'package:sorigami/features/recordings/recording_service.dart';
+import 'package:sorigamis/features/recordings/recording_service.dart';
 
 class _MockRecorder extends Mock implements AudioRecorder {}
 
@@ -1957,10 +1957,10 @@ git commit -m "feat: add RecordingService for AAC capture with pause/resume"
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/data/seed/seed_data.dart';
-import 'package:sorigami/features/recordings/recording_info_sheet.dart';
-import 'package:sorigami/providers/providers.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/data/seed/seed_data.dart';
+import 'package:sorigamis/features/recordings/recording_info_sheet.dart';
+import 'package:sorigamis/providers/providers.dart';
 import 'package:drift/native.dart';
 
 void main() {
@@ -2199,10 +2199,10 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/data/seed/seed_data.dart';
-import 'package:sorigami/features/recordings/recordings_screen.dart';
-import 'package:sorigami/providers/providers.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/data/seed/seed_data.dart';
+import 'package:sorigamis/features/recordings/recordings_screen.dart';
+import 'package:sorigamis/providers/providers.dart';
 
 void main() {
   testWidgets('renders a recording title', (tester) async {
@@ -2257,7 +2257,7 @@ class RecordingsScreen extends ConsumerWidget {
     final recordings = ref.watch(recordingsStreamProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sorigami'),
+        title: const Text('Sorigamis'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
@@ -2337,7 +2337,7 @@ git commit -m "feat: build recordings list screen with FAB and status badges"
 import 'package:flutter_test/flutter_test.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:mocktail/mocktail.dart';
-import 'package:sorigami/data/drive/drive_uploader.dart';
+import 'package:sorigamis/data/drive/drive_uploader.dart';
 import 'dart:io';
 
 class _MockApi extends Mock implements drive.DriveApi {}
@@ -2442,9 +2442,9 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/data/drive/drive_uploader.dart';
-import 'package:sorigami/features/detail/upload_controller.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/data/drive/drive_uploader.dart';
+import 'package:sorigamis/features/detail/upload_controller.dart';
 
 class _MockUploader extends Mock implements DriveUploader {}
 
@@ -2555,10 +2555,10 @@ import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/data/seed/seed_data.dart';
-import 'package:sorigami/data/pipeline/mock_pipeline_client.dart';
-import 'package:sorigami/features/detail/ai_process_controller.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/data/seed/seed_data.dart';
+import 'package:sorigamis/data/pipeline/mock_pipeline_client.dart';
+import 'package:sorigamis/features/detail/ai_process_controller.dart';
 
 void main() {
   late AppDatabase db;
@@ -2721,9 +2721,9 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/features/detail/result_tab.dart';
-import 'package:sorigami/providers/providers.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/features/detail/result_tab.dart';
+import 'package:sorigamis/providers/providers.dart';
 
 void main() {
   testWidgets('result tab shows transcript and skill section', (tester) async {
@@ -3008,9 +3008,9 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/features/settings/pipeline_server_section.dart';
-import 'package:sorigami/providers/providers.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/features/settings/pipeline_server_section.dart';
+import 'package:sorigamis/providers/providers.dart';
 
 void main() {
   testWidgets('test-connection shows success with healthy mock', (tester) async {
@@ -3199,9 +3199,9 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/features/settings/skill_edit_screen.dart';
-import 'package:sorigami/providers/providers.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/features/settings/skill_edit_screen.dart';
+import 'package:sorigamis/providers/providers.dart';
 
 void main() {
   testWidgets('saving a new skill persists it', (tester) async {
@@ -3511,10 +3511,10 @@ git commit -m "feat: add modes and skills management screens"
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sorigami/app.dart';
-import 'package:sorigami/data/db/database.dart';
-import 'package:sorigami/data/seed/seed_data.dart';
-import 'package:sorigami/providers/providers.dart';
+import 'package:sorigamis/app.dart';
+import 'package:sorigamis/data/db/database.dart';
+import 'package:sorigamis/data/seed/seed_data.dart';
+import 'package:sorigamis/providers/providers.dart';
 
 void main() {
   testWidgets('logged-in user sees recordings screen', (tester) async {
@@ -3525,10 +3525,10 @@ void main() {
         databaseProvider.overrideWithValue(db),
         currentUserIdProvider.overrideWith((ref) => 'u1'),
       ],
-      child: const SorigamiApp(),
+      child: const SorigamisApp(),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Sorigami'), findsOneWidget); // app bar title
+    expect(find.text('Sorigamis'), findsOneWidget); // app bar title
     expect(find.text('Record'), findsOneWidget);    // FAB
   });
 }
