@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Sorigami** is a cross-platform Flutter mobile app (Android + iOS) that records conversations and routes them through an AI pipeline to produce speaker-attributed transcripts, summaries, and action items. The core concept is **Modes** — named recording contexts (e.g. "Team Meeting") that bundle AI Skills and apply them automatically.
+**Sorigamis** is a cross-platform Flutter mobile app (Android + iOS) that records conversations and routes them through an AI pipeline to produce speaker-attributed transcripts, summaries, and action items. The core concept is **Modes** — named recording contexts (e.g. "Team Meeting") that bundle AI Skills and apply them automatically.
 
 The app is a thin client: record → store locally → upload to Google Drive → trigger AI pipeline → poll for results. All AI runs in the pipeline, not on device.
 
