@@ -86,13 +86,13 @@ Stand up the real pipeline and wire the app to it:
 ### System Layers
 
 ```
-┌─────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────┐
 │                   Sorigamis (Flutter)                 │  ← Milestone 1
 │                                                       │
 │  UI Layer        Screens + Widgets (Riverpod)         │
 │  Domain Layer    Use cases, entities, interfaces      │
 │  Data Layer      Repositories, local DB, API clients  │
-└──────┬──────────────────┬──────────────┬─────────────┘
+└──────┬───────────────────┬──────────────┬─────────────┘
        │ Firebase Auth JWT │ Google Drive │ Pipeline REST
        ▼                   ▼ OAuth        ▼ (mock in M1, LAN in M2)
  ┌───────────┐   ┌──────────────┐   ┌──────────────────────────────────┐
@@ -100,8 +100,8 @@ Stand up the real pipeline and wire the app to it:
  │ Auth +    │   │ (audio       │   │  Stage 1: transcode → whisper →  │
  │ Firestore │   │  backup)     │   │    pyannote → ECAPA              │
  │ (Mktplace)│   └──────────────┘   │  Stage 2: LLM per Skill          │
- └───────────┘                      │  Actions: Slack / Linear /        │
-                                    │    GCal / webhook per Skill       │
+ └───────────┘                      │  Actions: Slack / Linear /       │
+                                    │    GCal / webhook per Skill      │
                                     └──────────────────────────────────┘
 ```
 
@@ -593,16 +593,16 @@ GET  /api/v1/health      → liveness/version
 Audio in (any format)
    │
    ▼ Stage 1 (audio pipeline) — once, shared
- ┌──────────────────────────────────────────────┐
+ ┌───────────────────────────────────────────────┐
  │ 1. Transcode → 16kHz mono WAV                 │
  │ 2. ASR with word timestamps and VAD           │
  │ 3. Speaker diarization (if identify_speakers) │
  │ 4. Speaker centroid re-assignment             │
  │ → speaker-attributed transcript               │
- └──────────────────────────────────────────────┘
+ └───────────────────────────────────────────────┘
    │
    ▼ For each Skill in sortOrder:
- ┌──────────────────────────────────────────────┐
+ ┌───────────────────────────────────────────────┐
  │  a. Assemble Stage 2 prompt from AI intent    │
  │  b. LLM call(transcript) → skill output       │
  │  c. For each Action in skill.actions:         │
@@ -611,7 +611,7 @@ Audio in (any format)
  │       GCal / webhook)                         │
  │     - Log result (success / error)            │
  │     - Failure → logged, does NOT abort        │
- └──────────────────────────────────────────────┘
+ └───────────────────────────────────────────────┘
    │
    ▼ store all results → status "completed"
 ```
@@ -668,9 +668,9 @@ Intent → pipeline mapping (owned by pipeline, expected to change as pipeline e
 
 | Intent field | Current pipeline target | Notes |
 |---|---|---|
-| `language` | ASR language setting | 'auto' → omit; pipeline detects |
-| `vocabulary_hints` | ASR initial prompt / vocabulary bias | joined to improve domain term recognition |
-| `identify_speakers` | enable/disable diarization | off → transcript only, faster |
+| `language` | `WHISPER_LANG` env | 'auto' → omit; pipeline detects |
+| `vocabulary_hints` | `WHISPER_PROMPT` env | joined into ASR initial prompt |
+| `identify_speakers` | run pyannote + ECAPA | off → transcript only, faster |
 | `output_type` / `focus_area` / `tone` / `output_language` | Stage 2 system prompt | assembled structured |
 | `additional_instructions` | Stage 2 system prompt | appended verbatim |
 | `pipeline_params.*` | merged over pipeline defaults | e.g. `num_speakers`, `vad_threshold` |
