@@ -71,3 +71,5 @@ coverage/
 
 # docs 
 docs/research/
+# Flutter DevTools (generated)
+devtools_options.yaml
