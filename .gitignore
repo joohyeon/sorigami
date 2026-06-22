@@ -1,0 +1,73 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+# NOTE: Drift generates *.g.dart files that ARE committed in this project
+# (see CLAUDE.md). Do not add a blanket *.g.dart ignore.
+*.freezed.dart
+
+# Android
+android/.gradle
+android/local.properties
+android/key.properties
+android/app/google-services.json
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+
+# iOS
+ios/Flutter/flutter_export_environment.sh
+ios/Pods/
+ios/.symlinks/
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/xcuserdata/
+**/ios/.generated/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# Coverage
+coverage/
+
+# Xcode SwiftPM build metadata
+**/xcshareddata/swiftpm/
+
+# docs 
+docs/research/
