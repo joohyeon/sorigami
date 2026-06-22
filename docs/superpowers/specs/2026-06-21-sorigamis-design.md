@@ -1,18 +1,21 @@
 # Sorigamis — Mobile App Design Spec
 **Date:** 2026-06-21  
+**Updated:** 2026-06-22  
 **Status:** Approved
 
 ---
 
 ## 1. Overview
 
-Sorigamis is a cross-platform mobile app (Android + iOS) that records conversations and routes them through an AI pipeline to produce speaker-attributed transcripts, summaries, and action items. The core interaction model is **Modes** — named recording contexts (e.g. "Team Meeting", "Sales Call") that bundle AI Skills and apply them automatically. Users pick a Mode once, hit Record, and get back structured results without configuring anything per recording.
+Sorigamis is a cross-platform mobile app (Android + iOS) that records conversations and routes them through an AI pipeline to produce speaker-attributed transcripts, summaries, and action items. The core interaction model is **Modes** — named recording contexts (e.g. "Team Meeting", "Sales Call") that bundle AI Skills and apply them automatically. Users pick a Mode once, hit Record, and get back structured results — and automatically triggered integration actions — without configuring anything per recording.
 
-The app is a thin client: it records, stores metadata, backs up audio to the user's cloud (Google Drive), and triggers the AI pipeline. All AI computation happens in the pipeline, not on the device.
+The app is a thin client: it records, stores metadata, backs up audio to the user's cloud (Google Drive), and triggers the AI pipeline. All AI computation and integration action execution happen in the pipeline, not on the device.
+
+**Skills are the unit of extensibility.** Anyone can build a Skill — combining AI intent (what to extract from the audio) with integration actions (what to do with the result, e.g. create Linear tickets, post to Slack). Skills are publishable to an in-app **Skill Marketplace** so others can install and use them. A Mode is simply an ordered set of Skills applied together after a recording.
 
 ### Background
 
-A working local pipeline already exists at `scripts/test_audio_diarize.py` in the SoriNote repo. It performs **Stage 1** processing: ffmpeg transcode → faster-whisper ASR (word timestamps) → pyannote speaker diarization → ECAPA-TDNN centroid re-assignment, producing a speaker-attributed transcript. It is multilingual (Korean + English) and CPU/MPS-capable. The **Stage 2** multi-agent step (summary / task / decision extraction) is new pipeline work.
+A working local AI pipeline already exists as the foundation for Sorigamis. It performs **Stage 1** processing: audio transcoding → automatic speech recognition (with word timestamps) → speaker diarization → speaker centroid re-assignment, producing a speaker-attributed transcript. It is multilingual (Korean + English) and runs on consumer hardware (CPU/MPS). The **Stage 2** multi-agent step — extracting summaries, tasks, decisions, and other structured outputs from the transcript — is new work that Skills drive.
 
 Long-term, Sorigamis grows beyond Fixli's internal productivity tool into a broader AX/AI work orchestration platform.
 
@@ -23,11 +26,13 @@ Long-term, Sorigamis grows beyond Fixli's internal productivity tool into a broa
 
 ### User Scenarios
 
-**Internal meeting:** User creates a recording → selects "Team Meeting" mode → records → saves locally → audio uploads to Google Drive → app triggers the AI pipeline → user views speaker-attributed transcript, summary, action items, and decision log.
+**Internal meeting:** User creates a recording → selects "Team Meeting" mode → records → saves locally → audio uploads to Google Drive → app triggers the AI pipeline → pipeline runs Stage 1 (transcript) → runs each Skill in order (AI extraction + integration actions) → user views unified results; action items were already created in Linear and posted to Slack.
 
 **Field / offline conversation:** User records in low-connectivity → recording saves locally → on reconnect, the upload queue processes automatically → user reviews results once processing completes.
 
 **Multilingual meeting:** User sets language to "auto" (or picks Korean/English) → Whisper detects and transcribes → Stage 2 returns results in the user's configured output language.
+
+**Skill author:** Power user creates a "Sales Call Follow-up" Skill — AI intent set to extract commitments, action set to create a HubSpot deal note via webhook — publishes it to the Marketplace. Teammates install it with one tap.
 
 ### Key Metrics
 
@@ -35,6 +40,7 @@ Long-term, Sorigamis grows beyond Fixli's internal productivity tool into a broa
 - AI processing success rate and average processing time
 - Weekly active users (WAU) and recordings per user per week
 - Result view rate (sessions where results were opened)
+- Skill Marketplace installs and published skill count
 - Crash-free session rate
 
 ---
@@ -48,18 +54,18 @@ The build is split into two milestones along a clean seam: the **mobile app** an
 Everything the user touches, end to end, with the pipeline **stubbed**:
 - Onboarding, permissions, Firebase Auth (Google sign-in)
 - Recording (record / pause / stop, background-safe), local SQLite storage
-- Modes & Skills configuration and management
+- Modes & Skills configuration and management, including action config
+- Skill Marketplace — browse, install, publish (backed by Firestore in M1)
 - Google Drive audio upload (OAuth, upload queue, retry)
-- Result viewing UI (transcript + per-skill sections) rendered against a **mock pipeline client** returning canned results
+- Result viewing UI (transcript + per-skill sections + action logs) rendered against a **mock pipeline client** returning canned results
 - Settings, including the Pipeline Server URL field (validated against `/health`)
-
-The app talks to the pipeline through a repository interface (Section 8). In M1 that interface is backed by a stub/mock server, so the whole UX — including the result screens — can be built and tested with no real AI.
 
 ### Milestone 2 — AI Integration & Pipeline
 
 Stand up the real pipeline and wire the app to it:
 - Pipeline server wrapping the existing `test_audio_diarize.py` (Stage 1) + new Stage 2 multi-agent step
-- Real implementation of the job submission / status / result contract
+- Sequential skill execution: Stage 1 once → Skills run in sortOrder, AI then actions per skill
+- Integration action execution: Slack, Linear, Google Calendar, generic webhook
 - Skill config → pipeline parameter mapping
 - Multilingual transcription/summarization
 - Swap the app's mock pipeline client for the live one — no UI changes
@@ -71,6 +77,7 @@ Stand up the real pipeline and wire the app to it:
 - Cloud-hosted pipeline with job queue + object storage
 - FCM push notifications on completion (replaces poll-only)
 - Multi-user / team sharing, Fixli orchestrator integration
+- Marketplace moderation and featured skills curation
 
 ---
 
@@ -81,21 +88,21 @@ Stand up the real pipeline and wire the app to it:
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   Sorigamis (Flutter)                 │  ← Milestone 1
-│                                                     │
-│  UI Layer        Screens + Widgets (Riverpod)       │
-│  Domain Layer    Use cases, entities, interfaces    │
-│  Data Layer      Repositories, local DB, API client │
-└──────┬──────────────────┬──────────────────┬────────┘
-       │ Firebase Auth JWT │ Google Drive     │ Pipeline REST
-       ▼                   ▼ OAuth            ▼ (mock in M1, LAN in M2)
- ┌───────────┐   ┌──────────────┐   ┌─────────────────────────┐
- │ Firebase  │   │ Google Drive │   │  Pipeline Server        │  ← Milestone 2
- │ Auth      │   │ (audio       │   │  (FastAPI wrapper)      │
- │           │   │  backup)     │   │   Stage 1: transcode →  │
- └───────────┘   └──────────────┘   │    whisper → pyannote → │
-                                     │    ECAPA reassign       │
-                                     │   Stage 2: LLM agents   │
-                                     └─────────────────────────┘
+│                                                       │
+│  UI Layer        Screens + Widgets (Riverpod)         │
+│  Domain Layer    Use cases, entities, interfaces      │
+│  Data Layer      Repositories, local DB, API clients  │
+└──────┬──────────────────┬──────────────┬─────────────┘
+       │ Firebase Auth JWT │ Google Drive │ Pipeline REST
+       ▼                   ▼ OAuth        ▼ (mock in M1, LAN in M2)
+ ┌───────────┐   ┌──────────────┐   ┌──────────────────────────────────┐
+ │ Firebase  │   │ Google Drive │   │  Pipeline Server  (Milestone 2)  │
+ │ Auth +    │   │ (audio       │   │  Stage 1: transcode → whisper →  │
+ │ Firestore │   │  backup)     │   │    pyannote → ECAPA              │
+ │ (Mktplace)│   └──────────────┘   │  Stage 2: LLM per Skill          │
+ └───────────┘                      │  Actions: Slack / Linear /        │
+                                    │    GCal / webhook per Skill       │
+                                    └──────────────────────────────────┘
 ```
 
 ### Key Decisions
@@ -104,9 +111,11 @@ Stand up the real pipeline and wire the app to it:
 - **Clean architecture (3 layers)** — UI never touches network directly; repositories abstract local vs. remote and let the pipeline be mocked in M1
 - **Drift (SQLite)** — offline-first local DB; recordings, metadata, and cached AI results survive offline
 - **Firebase Auth** — identity and JWT tokens only
+- **Firestore** — Skill Marketplace catalog (read-heavy, simple document model)
 - **Google Drive OAuth** — separate credential from app auth, stored encrypted in local DB
 - **WorkManager** (Android) / **BGTaskScheduler** (iOS) — keeps Drive uploads and polling alive in background
 - **Configurable pipeline base URL** — mock in M1, LAN IP in M2, hosted URL in M3; same contract throughout
+- **Pipeline owns action execution** — keeps credentials off the device, matches the thin-client principle; adding new integration types requires pipeline updates, not app releases
 
 ---
 
@@ -118,16 +127,55 @@ This is the central design concept of Sorigamis.
 
 ### Concepts
 
-**Mode** is the user-facing concept — a named recording context with an icon, backed by a set of Skills. Users see and interact with Modes everywhere: on the recording screen, in the recordings list, and in Settings.
+**Mode** is the user-facing concept — a named recording context with an icon, backed by an **ordered** list of Skills. Users see and interact with Modes everywhere: on the recording screen, in the recordings list, and in Settings. The order of Skills in a Mode determines execution order in the pipeline.
 
-**Skill** is the underlying AI capability. A Skill captures *user intent* — what to transcribe and what to produce — in pipeline-agnostic terms, plus an optional opaque overrides bag. In Milestone 1 these fields are authored and stored by the app; Milestone 2 maps them onto the pipeline's actual parameters. Users manage Skills in Settings but never select them per recording.
+**Skill** is a complete automation unit with three parts:
+1. **AI intent** — what to extract from the transcript (pipeline-agnostic fields)
+2. **Integration actions** — an ordered list of actions the pipeline fires after the AI step for that skill
+3. **Marketplace metadata** — author, version, install count (populated only for published/installed skills)
 
 ```
 Mode "Team Meeting" 🗓
-  └── Skill: Meeting Summary   (Stage1: auto speakers, ko/auto • Stage2: summary, concise)
-  └── Skill: Action Items      (Stage1: assignee detection on • Stage2: tasks)
-  └── Skill: Decision Log      (Stage2: custom focus: decisions made)
+  └── Skill 1: "Meeting Summary"
+        AI intent:   output_type=summary, tone=concise
+        Actions:     [{ type: slack, webhook_url: "...", message: "{{output}}" }]
+
+  └── Skill 2: "Action Items"
+        AI intent:   output_type=tasks, identify_speakers=true
+        Actions:     [{ type: linear, api_key: "...", team_id: "...",
+                        title: "{{task}}", assignee_from_speaker: true }]
+
+  └── Skill 3: "Decision Log"
+        AI intent:   output_type=custom, focus_area: "decisions made"
+        Actions:     []
 ```
+
+### Pipeline Execution Flow
+
+Stage 1 runs once (shared across all skills). Then skills execute sequentially in sortOrder:
+
+```
+Audio in
+  │
+  ▼ Stage 1 (once, shared)
+  Speaker-attributed transcript
+  │
+  ▼ Skill 1: "Meeting Summary"
+    → AI extraction → output stored
+    → Action: POST summary to Slack #general
+  │
+  ▼ Skill 2: "Action Items"
+    → AI extraction (uses same Stage 1 transcript)
+    → Action: Create Linear tickets, one per task
+  │
+  ▼ Skill 3: "Decision Log"
+    → AI extraction
+    → (no actions configured)
+  │
+  ▼ All results → app polls /jobs/:id/result
+```
+
+Each skill sees the Stage 1 transcript as input. Skills do not chain (Skill 2 does not receive Skill 1's output). Action failure does not abort subsequent skills.
 
 ### Seed Modes (shipped with app, editable)
 
@@ -143,26 +191,25 @@ Mode "Team Meeting" 🗓
 
 ### Skill Configuration
 
-A Skill describes **user intent**, not pipeline internals. The app stores stable, pipeline-agnostic fields; the pipeline owns the mapping from intent to whatever knobs its current implementation exposes (Section 10). This keeps the app's data model durable as `test_audio_diarize.py` and Stage 2 evolve — adding or changing a pipeline knob never forces an app schema migration.
-
 **Transcription intent** (what to transcribe, not how):
 - `language` — `auto | ko | en | ...` (spoken language; `auto` = let the pipeline detect)
-- `identifySpeakers` — Bool; "tell me who said what" (the pipeline decides how — diarization, speaker count, etc.)
-- `vocabularyHints` — `List<String>`; domain terms to recognize accurately, e.g. `["Fixli", "OKR", "Sorigamis"]`
+- `identifySpeakers` — Bool; "tell me who said what"
+- `vocabularyHints` — `List<String>`; domain terms to recognize accurately
 
 **Output intent** (what to produce from the transcript):
 - `outputType` — `summary | tasks | both | custom`
 - `focusArea` — free text: `"decisions made"`, `"blockers"`, `"commitments"`
 - `tone` — `formal | casual | concise`
-- `outputLanguage` — `auto | ko | en | ...` (may differ from spoken language)
+- `outputLanguage` — `auto | ko | en | ...`
 - `additionalInstructions` — free-text for power users
 
+**Integration actions** (what to do after AI extraction):
+- `actions` — ordered list of `SkillAction` entries (see data model)
+- Supported types: `slack | linear | google_calendar | webhook`
+- Templates support `{{output}}` (full AI output) and `{{speaker}}` (attributed speaker name)
+
 **Advanced overrides** (escape hatch, optional):
-- `pipelineParams` — opaque `Map<String, dynamic>` (JSON) passed through to the pipeline untouched. This is where implementation-specific knobs live (e.g. `{"num_speakers": 2, "vad_threshold": 0.6, "whisper_model": "large-v3"}`). The app neither validates nor interprets these — it forwards them, and the pipeline merges them over its defaults. New pipeline knobs are usable immediately with no app release.
-
-Most users only touch Output intent; seed Skills set sensible transcription defaults. `pipelineParams` stays empty unless a power user fills it.
-
-> **Scalability path:** the pipeline can later expose a `/capabilities` schema describing its tunable params, and the app can render the Advanced section dynamically from that schema — so even the advanced UI tracks the pipeline without app updates. Out of scope for M1/M2; the opaque bag is the MVP mechanism.
+- `pipelineParams` — opaque `Map<String, dynamic>` forwarded to pipeline untouched
 
 ### Mode Selection UX
 
@@ -186,7 +233,41 @@ RecordingsScreen
 
 ---
 
-## 5. Data Model
+## 5. Skill Marketplace
+
+An in-app library where users publish, discover, and install Skills.
+
+### Browsing & Installing
+
+- Accessible from Settings → Skills → "Browse Marketplace"
+- Skills listed with: name, description, author, install count, output type tag, action type badges
+- One-tap install: skill is copied into the user's local skill library with all action config (including embedded credentials/URLs) included as the creator set them
+- Installed skills appear in SkillListScreen with an "installed from marketplace" badge
+- Search by name/tag; filter by output type or action type
+
+### Publishing
+
+- From SkillEditScreen → "Publish to Marketplace"
+- Creator provides a short description and tags before publishing
+- Published skills are **immutable snapshots** — editing creates a new version; installed users stay on their version until they manually update
+- No moderation for MVP — any authenticated user can publish
+- "Update available" badge appears on installed skills when the author publishes a new version
+
+### Credential Model
+
+Action config (Slack webhook URLs, Linear API keys, Google Calendar tokens, webhook URLs) is **embedded in the skill** and included in the marketplace snapshot. This is intentional: the creator's endpoint is the shared destination (e.g. a team's shared Linear workspace or Slack channel). Users who clone and edit a skill can redirect actions to their own endpoints.
+
+### Skill Versioning
+
+Version is a monotonically increasing integer, auto-incremented on each publish. No auto-update — manual update only.
+
+### Marketplace Backend (M1)
+
+Backed by **Firestore** (Firebase): a `marketplace_skills` collection where each document is a full skill snapshot. Read-heavy; write on publish/update. Authentication via Firebase Auth — only the author can update their own published skills.
+
+---
+
+## 6. Data Model
 
 ### Local Database (Drift/SQLite)
 
@@ -215,13 +296,20 @@ RecordingResult
 ├── id                UUID (PK)
 ├── recordingId       UUID (FK → Recording)
 ├── transcript        String              (speaker-attributed, shared across skills)
-├── skillResults      List<SkillResult>   (JSON, one entry per skill)
+├── skillResults      List<SkillResult>   (JSON, one entry per skill in execution order)
 └── receivedAt        DateTime
 
 SkillResult (embedded JSON)
 ├── skillId           UUID
 ├── skillName         String
-└── output            String
+├── output            String
+└── actionsLog        List<ActionLog>   (one entry per action)
+
+ActionLog (embedded JSON)
+├── type              String   ('slack' | 'linear' | 'google_calendar' | 'webhook')
+├── firedAt           DateTime
+├── success           Bool
+└── error             String?
 
 Mode
 ├── id                UUID (PK)
@@ -242,17 +330,27 @@ Skill
 ├── description           String?
 │   # Transcription intent (pipeline-agnostic)
 ├── language              String    ('auto' | 'ko' | 'en' | ...)
-├── identifySpeakers      Bool      ("who said what"; pipeline decides how)
-├── vocabularyHints       List<String>  (domain terms to recognize accurately)
+├── identifySpeakers      Bool
+├── vocabularyHints       List<String>
 │   # Output intent
 ├── outputType            Enum (summary | tasks | both | custom)
 ├── focusArea             String?
 ├── tone                  Enum (formal | casual | concise)
 ├── outputLanguage        String
 ├── additionalInstructions String?
-│   # Advanced — opaque passthrough; app never interprets these
-├── pipelineParams        Map<String, dynamic>?  (JSON; merged over pipeline defaults)
+│   # Advanced — opaque passthrough
+├── pipelineParams        Map<String, dynamic>?
+│   # Integration actions (new)
+├── actions               List<SkillAction>   (JSON, ordered by sortOrder)
+│   # Marketplace metadata (null for locally-created skills)
+├── marketplaceSkillId    String?   (Firestore doc ID, null if not from marketplace)
+├── marketplaceVersion    Int?
 └── createdAt             DateTime
+
+SkillAction (embedded JSON)
+├── type                  Enum (slack | linear | google_calendar | webhook)
+├── config                Map<String, dynamic>   (type-specific config — see below)
+└── sortOrder             Int
 
 UserSettings
 ├── userId                String    (Firebase UID)
@@ -266,18 +364,47 @@ UserSettings
 └── fcmToken              String?   (Milestone 3; null until then)
 ```
 
+**Action config shapes per type:**
+
+```
+slack:            { webhook_url: String, message_template: String }
+linear:           { api_key: String, team_id: String, title_template: String,
+                    assignee_from_speaker: Bool }
+google_calendar:  { calendar_id: String, oauth_token: String,
+                    event_title_template: String }
+webhook:          { url: String, method: "POST"|"GET", headers: Map<String,String>?,
+                    body_template: String }
+```
+
+Templates support `{{output}}` (skill AI output), `{{speaker}}` (speaker attribution from transcript), and `{{recording_title}}` (the recording's title as set by the user).
+
+### Firestore (Marketplace Catalog)
+
+```
+marketplace_skills/{docId}
+├── authorId          String   (Firebase UID)
+├── authorName        String
+├── name              String
+├── description       String
+├── tags              List<String>
+├── outputType        String
+├── actionTypes       List<String>   (e.g. ['slack', 'linear'])
+├── latestVersion     Int
+├── installCount      Int
+├── skillSnapshot     Map   (full Skill config at publish time, incl. actions)
+└── publishedAt       Timestamp
+```
+
 ### Key Decisions
 
-- `pipelineServerUrl` — the one knob that flips between mock, LAN, and cloud
-- `activeModeId` — restores last used mode on app open, zero tap for repeat users
-- `customSkillIds` — per-recording skill override without mutating the mode
-- Skill stores pipeline-agnostic intent + an opaque `pipelineParams` bag — the app's schema stays stable as the pipeline evolves; the pipeline owns intent→knob mapping
-- `driveRefreshToken` stored via Flutter Secure Storage — never in plain SQLite
-- `RecordingResult` lazy-loaded — only fetched when user opens ResultTab
+- `actions` stored as JSON array in Skill — pipeline receives the full action config per skill in the job submission payload
+- `marketplaceSkillId` links local skill to its marketplace origin for update-checking
+- `actionsLog` in `SkillResult` gives the debug view its per-action execution detail
+- Firestore for marketplace — avoids running a custom catalog API in M1; auth-rules restrict writes to the author's UID
 
 ---
 
-## 6. Screen Flow
+## 7. Screen Flow
 
 ```
 Onboarding (first launch only)
@@ -304,12 +431,15 @@ Main (bottom nav: Recordings | Settings)
 │   └── RecordingDetailScreen
 │       ├── InfoTab           (metadata, mode used, edit title/memo/tags)
 │       ├── UploadTab         (Google Drive status, upload/retry, target folder)
-│       ├── AIProcessTab      (submit to pipeline, processing stage, retry)
+│       ├── AIProcessTab      (submit to pipeline, processing stage + current skill, retry)
 │       └── ResultTab
-│           ├── Transcript    (speaker-attributed, collapsible)
-│           └── Per-skill result sections (collapsible, labelled by skill name)
-│               e.g. "Action Items", "Decision Log", "Meeting Summary"
-│               Copy / Share (native share sheet) per section
+│           ├── Unified output view  (default — all skill outputs labelled by skill name)
+│           │   Copy / Share (native share sheet) per skill section
+│           └── [Skill Details] toggle  (debug view)
+│               └── Per-skill expandable row
+│                   ├── Skill name + status (✓ AI done → ✓ Actions fired | ✗ error)
+│                   ├── AI output text
+│                   └── Action log (type, fired_at, success/error per action)
 │
 └── SettingsScreen
     ├── AccountSection            (Firebase user, sign out)
@@ -319,12 +449,28 @@ Main (bottom nav: Recordings | Settings)
     │   ├── ModeListScreen        (all modes, seed modes first, set default)
     │   └── ModeEditScreen        (name, icon, skill multi-select with sort order)
     ├── SkillsSection
-    │   ├── SkillListScreen       (all skills, grouped by output type)
+    │   ├── SkillListScreen       (all skills; "installed" badge on marketplace skills)
+    │   │   └── [Browse Marketplace] → MarketplaceScreen
+    │   │       ├── Search / filter by tag, output type, action type
+    │   │       ├── SkillCard: name, author, description, install count, action badges
+    │   │       └── SkillDetailScreen
+    │   │           ├── Full description, version, author, action type preview
+    │   │           └── [Install] / [Update available] / [Installed ✓]
     │   └── SkillEditScreen
     │       ├── Name / description
     │       ├── Output intent: output type / focus / tone / output language / instructions
     │       ├── Transcription intent: language / identify speakers / vocabulary hints
-    │       └── Advanced (collapsed): pipelineParams key-value/JSON editor
+    │       ├── Actions section
+    │       │   ├── Action list (ordered, drag to reorder)
+    │       │   └── ActionEditSheet (per action)
+    │       │       ├── Type: Slack | Linear | Google Calendar | Webhook
+    │       │       └── Type-specific config fields
+    │       │           slack:    Webhook URL, message template
+    │       │           linear:   API key, team ID, title template, assignee from speaker toggle
+    │       │           gcal:     Calendar ID, OAuth connect, event title template
+    │       │           webhook:  URL, method, headers, body template
+    │       └── Advanced (collapsed): pipelineParams JSON editor
+    │           [Publish to Marketplace] button (if skill is complete)
     ├── DefaultsSection           (language, category)
     └── NotificationsSection      (toggle — Milestone 3)
 ```
@@ -335,14 +481,14 @@ Main (bottom nav: Recordings | Settings)
 - **Pipeline Server section** — a "Test connection" button hits `/health` and shows ✅/❌
 - **Mode chip row** is the primary interaction on RecordingInfoSheet
 - **Active mode persists** via `UserSettings.activeModeId`
-- **Advanced `pipelineParams` hidden by default** — typical users never touch pipeline-specific knobs
-- **ResultTab** sections labelled by skill name; transcript shows speaker attribution
+- **ResultTab** unified view is the default; Skill Details toggle for debug
+- **AIProcessTab** shows current skill name and phase (AI / actions) during processing
 - **RecordingsList** cards show the mode icon for at-a-glance scanning
 - **Offline state** surfaced inline as a "waiting for connection" chip
 
 ---
 
-## 7. App Error Handling & Offline Behaviour
+## 8. App Error Handling & Offline Behaviour
 
 ### Google Drive Upload Queue
 - `WorkManager` job persists across app restarts and device reboots
@@ -360,9 +506,9 @@ Main (bottom nav: Recordings | Settings)
 
 ---
 
-## 8. Pipeline Client Contract (M1 builds against; M2 implements)
+## 9. Pipeline Client Contract (M1 builds against; M2 implements)
 
-The app reaches the pipeline through a repository interface. In Milestone 1 it is backed by a **mock client** (canned transcript + skill results, simulated delays/states) so the entire app — including the result screens — is buildable and demoable. Milestone 2 swaps in the live client with no UI changes.
+The app reaches the pipeline through a repository interface. In Milestone 1 it is backed by a **mock client** (canned transcript + skill results + action logs, simulated delays/states). Milestone 2 swaps in the live client with no UI changes.
 
 ### Authentication
 All requests: `Authorization: Bearer <firebase_jwt>`.
@@ -380,29 +526,38 @@ Body: multipart/form-data
   - audio_duration_s:  Int
   - category:          String?
   - mode_name:         String?
-  - skills:            JSON array  (resolved skill config — see Section 10)
+  - skills:            JSON array  (resolved skill config incl. actions — see Section 11)
 Response: { job_id: UUID, status: "requested" }
 
 GET /api/v1/jobs/:job_id
 Response: {
-  job_id: UUID,
-  status: "requested" | "processing" | "completed" | "failed",
-  stage:  "transcribing" | "diarizing" | "summarizing" | null,
-  error:  String?
+  job_id:         UUID,
+  status:         "requested" | "processing" | "completed" | "failed",
+  stage:          "transcribing" | "diarizing" | "running_skills" | null,
+  current_skill:  { index: Int, name: String, phase: "ai" | "actions" } | null,
+  error:          String?
 }
 
 GET /api/v1/jobs/:job_id/result
 Response: {
-  transcript: String,   # speaker-attributed
-  skill_results: [ { skill_id: UUID, skill_name: String, output: String } ]
+  transcript:    String,   # speaker-attributed (Stage 1 output, shared across all skills)
+  skill_results: [
+    {
+      skill_id:    UUID,
+      skill_name:  String,
+      output:      String,
+      actions_log: [
+        { type: String, fired_at: DateTime, success: Bool, error: String? }
+      ]
+    }
+  ]
 }
-```
 
 ### Skill Resolution (app-side, before submission)
 
 ```
 1. If recording has customSkillIds → use those
-2. Else use skills from recording.modeId
+2. Else use skills from recording.modeId (in sortOrder)
 3. Else use skills from the default mode
 4. Else send empty skills array (server uses its own defaults)
 ```
@@ -413,98 +568,113 @@ Response: {
 - Start polling 10s after submission; interval 15s while `processing`, 30s after 5 min
 - Max attempts: 40 (≈ 20 min); exhausted → `failed` with "Timed out — tap to retry"
 - On app foreground → resume polling for any `processing` jobs
-- Milestone 3: FCM `job_completed` push cancels polling and fetches the result immediately
+- Milestone 3: FCM `job_completed` push cancels polling and fetches result immediately
 
 ---
 
 # Milestone 2 — AI Integration & Pipeline
 
-## 9. Audio Processing & Pipeline Integration
+## 10. Audio Processing & Pipeline Integration
 
 ### Pipeline Server (M2 — local LAN)
 
-A thin FastAPI wrapper (~150–250 lines) around the existing `test_audio_diarize.py`, plus a new Stage 2 step. Runs on a developer machine; the app reaches it via the Pipeline Server URL.
+A thin FastAPI wrapper (~150–250 lines) around the existing Stage 1 audio pipeline, plus the new Stage 2 multi-agent step and integration action execution. Runs on a developer machine; the app reaches it via the Pipeline Server URL.
 
 ```
-POST /api/v1/jobs        → save uploaded audio, spawn pipeline subprocess, return job_id
-GET  /api/v1/jobs/:id    → status (requested | processing | completed | failed) + stage
-GET  /api/v1/jobs/:id/result → parse diarized output + Stage 2 → JSON
-GET  /api/v1/health      → liveness/version for the app's connection test
+POST /api/v1/jobs        → save uploaded audio, spawn pipeline, return job_id
+GET  /api/v1/jobs/:id    → status + current_skill progress
+GET  /api/v1/jobs/:id/result → skill results + action logs
+GET  /api/v1/health      → liveness/version
 ```
-
-Implements the exact contract in Section 8. In M2 the server may relax JWT verification for local development, but the app always sends the header.
 
 ### Pipeline Stages
-
-Stage 1 is the existing script, invoked with per-job env vars. Stage 2 is new.
 
 ```
 Audio in (any format)
    │
-   ▼ Stage 1 (test_audio_diarize.py)
+   ▼ Stage 1 (audio pipeline) — once, shared
  ┌──────────────────────────────────────────────┐
- │ 1. ffmpeg transcode → 16kHz mono WAV          │
- │ 2. faster-whisper ASR (word timestamps, VAD)  │  ← WHISPER_LANG, WHISPER_PROMPT,
- │ 3. pyannote diarization (if identify_speakers)│    WHISPER_VAD_THRESHOLD
- │ 4. ECAPA-TDNN centroid re-assignment          │  ← NUM_SPEAKERS
+ │ 1. Transcode → 16kHz mono WAV                 │
+ │ 2. ASR with word timestamps and VAD           │
+ │ 3. Speaker diarization (if identify_speakers) │
+ │ 4. Speaker centroid re-assignment             │
  │ → speaker-attributed transcript               │
  └──────────────────────────────────────────────┘
-   │  (utterances: speaker_a/b/..., text, confidence)
-   ▼ Stage 2 (new, per Skill)
+   │
+   ▼ For each Skill in sortOrder:
  ┌──────────────────────────────────────────────┐
- │ For each Skill in the job:                    │
- │   assemble system prompt from Stage 2 fields  │
- │   + additionalInstructions                    │
- │   LLM call(transcript) → skill output         │
+ │  a. Assemble Stage 2 prompt from AI intent    │
+ │  b. LLM call(transcript) → skill output       │
+ │  c. For each Action in skill.actions:         │
+ │     - Interpolate {{output}}, {{speaker}}     │
+ │     - Fire integration (Slack / Linear /      │
+ │       GCal / webhook)                         │
+ │     - Log result (success / error)            │
+ │     - Failure → logged, does NOT abort        │
  └──────────────────────────────────────────────┘
    │
-   ▼ store result → app polls /jobs/:id/result
+   ▼ store all results → status "completed"
 ```
 
 ### Audio Capture (app-side note)
 
-- Recorded as M4A (AAC); the pipeline transcodes any input via ffmpeg, so format is flexible
-- The pipeline always transcodes to 16 kHz mono WAV (Whisper's native input) regardless of source
+- Recorded as M4A (AAC); the pipeline transcodes any input via ffmpeg
+- Pipeline always transcodes to 16 kHz mono WAV (Whisper's native input)
 
 ---
 
-## 10. Skill → Pipeline Parameter Mapping
+## 11. Skill → Pipeline Parameter Mapping
 
-The app sends **intent** plus an opaque `pipeline_params` bag. The pipeline owns the translation from intent to whatever knobs its current implementation exposes — so when `test_audio_diarize.py` changes, only this mapping layer changes, never the app.
+The `skills` array in `POST /jobs`, per skill:
 
-The `skills` array in `POST /jobs` per skill:
-
+```json
+{
+  "skill_id":                "UUID",
+  "skill_name":              "String",
+  "sort_order":              0,
+  "language":                "auto",
+  "identify_speakers":       true,
+  "vocabulary_hints":        ["Fixli", "OKR"],
+  "output_type":             "tasks",
+  "focus_area":              "String?",
+  "tone":                    "concise",
+  "output_language":         "en",
+  "additional_instructions": "String?",
+  "pipeline_params":         {},
+  "actions": [
+    {
+      "type":   "linear",
+      "config": {
+        "api_key":              "lin_...",
+        "team_id":              "TEAM_ID",
+        "title_template":       "{{output}}",
+        "assignee_from_speaker": true
+      },
+      "sort_order": 0
+    },
+    {
+      "type":   "slack",
+      "config": {
+        "webhook_url":       "https://hooks.slack.com/...",
+        "message_template":  "Action items from {{recording_title}}:\n{{output}}"
+      },
+      "sort_order": 1
+    }
+  ]
+}
 ```
-skills: [
-  {
-    skill_id:                UUID,
-    skill_name:              String,
-    # transcription intent
-    language:                String,        ('auto' | 'ko' | 'en' | ...)
-    identify_speakers:       Bool,          ("who said what")
-    vocabulary_hints:        [String],      (domain terms)
-    # output intent
-    output_type:             "summary" | "tasks" | "both" | "custom",
-    focus_area:              String?,
-    tone:                    "formal" | "casual" | "concise",
-    output_language:         String,
-    additional_instructions: String?,
-    # opaque overrides — forwarded as-is, merged over pipeline defaults
-    pipeline_params:         { ... }?       e.g. {"num_speakers": 2, "vad_threshold": 0.6}
-  }
-]
-```
 
-The mapping below is **owned by the pipeline (Milestone 2), not the app**. It reflects the *current* `test_audio_diarize.py` and is expected to change as the pipeline evolves:
+Intent → pipeline mapping (owned by pipeline, expected to change as pipeline evolves):
 
 | Intent field | Current pipeline target | Notes |
 |---|---|---|
-| `language` | `WHISPER_LANG` env | 'auto' → omit; pipeline detects |
-| `vocabulary_hints` | `WHISPER_PROMPT` env | joined into the ASR initial prompt |
-| `identify_speakers` | run pyannote diarization (or skip) + ECAPA reassign | off → transcript only, faster |
+| `language` | ASR language setting | 'auto' → omit; pipeline detects |
+| `vocabulary_hints` | ASR initial prompt / vocabulary bias | joined to improve domain term recognition |
+| `identify_speakers` | enable/disable diarization | off → transcript only, faster |
 | `output_type` / `focus_area` / `tone` / `output_language` | Stage 2 system prompt | assembled structured |
 | `additional_instructions` | Stage 2 system prompt | appended verbatim |
-| `pipeline_params.*` | merged over pipeline defaults | e.g. `num_speakers`→`NUM_SPEAKERS`, `vad_threshold`→`WHISPER_VAD_THRESHOLD` |
+| `pipeline_params.*` | merged over pipeline defaults | e.g. `num_speakers`, `vad_threshold` |
+| `actions` | executed after Stage 2 per skill | pipeline resolves templates + fires integrations |
 
 ### Stage 2 System Prompt Assembly
 
@@ -523,7 +693,7 @@ Transcript:
 
 ---
 
-## 11. Multilingual Support
+## 12. Multilingual Support
 
 - Whisper auto-detects language when `language = 'auto'`
 - `output_language` controls Stage 2 output independently — Korean meeting → English summary is supported
@@ -531,20 +701,23 @@ Transcript:
 
 ---
 
-## 12. Pipeline-Side Error Handling
+## 13. Pipeline-Side Error Handling
 
 - App validates duration and file readability before submission; server validates again on receipt
-- `stage` field in the status response drives the UI's "Transcribing… / Diarizing… / Summarizing…" hint
-- If Stage 1 fails (e.g. corrupt audio, ffmpeg error), job → `failed` with the error message passed through
-- If a Stage 2 skill fails, that skill's `output` carries an error note; other skills still return
+- `current_skill` field in status response drives the UI's per-skill progress indicator
+- If Stage 1 fails (e.g. corrupt audio, ffmpeg error), job → `failed` with error passed through
+- If a Skill's AI step fails, its actions are skipped; failure noted in `actions_log`; subsequent skills still run
+- If an action fails, it is logged with the error; the next action and next skill still run
 - Server error messages passed through verbatim (internal users benefit from raw errors)
 
 ---
 
-## 13. Out of Scope for Milestones 1–2
+## 14. Out of Scope for Milestones 1–2
 
 - Cloud-hosted pipeline, job queue, object storage (Milestone 3)
 - FCM push notifications (Milestone 3 — poll-only until then)
+- Marketplace moderation / featured skills curation (Milestone 3)
+- Skill chaining (later skill consuming earlier skill's output as input)
 - mDNS/Bonjour auto-discovery of the pipeline server (manual URL for now)
 - Dropbox / OneDrive integration (Google Drive only)
 - In-app audio playback of recordings
@@ -553,3 +726,4 @@ Transcript:
 - Fixli orchestrator integration (future AX platform)
 - App Store / Play Store submission pipeline
 - Real-time live transcription during recording
+- Marketplace analytics dashboard for skill authors
