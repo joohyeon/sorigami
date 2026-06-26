@@ -234,6 +234,9 @@ def test_normalize_utterance_passthrough_and_extra_keys():
     # Translation preserves unrelated keys (e.g. speaker label).
     out = _normalize_utterance({"start": 1.0, "end": 2.0, "text": "hi", "speaker": "A"})
     assert out == {"start_sec": 1.0, "end_sec": 2.0, "text": "hi", "speaker": "A"}
+    # Mixed input (both _sec and plain) — old keys must be dropped to avoid unknown-column errors.
+    mixed = {"start_sec": 1.0, "start": 1.0, "end_sec": 2.0, "end": 2.0, "text": "hi"}
+    assert _normalize_utterance(mixed) == {"start_sec": 1.0, "end_sec": 2.0, "text": "hi"}
 
 
 def test_write_speakers_returns_inserted_rows(mock_supabase_client):

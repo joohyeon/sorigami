@@ -32,13 +32,14 @@ def _normalize_utterance(row: dict) -> dict:
     """Map pipeline utterance fields to the database schema.
 
     The orchestrator instructions and local workers emit `start`/`end`, but the
-    database table stores `start_sec`/`end_sec`.
+    database table stores `start_sec`/`end_sec`. Both rename and drop the old
+    keys so callers that already have `_sec` fields don't leak unknown columns.
     """
     normalized = dict(row)
-    if "start_sec" not in normalized and "start" in normalized:
-        normalized["start_sec"] = normalized.pop("start")
-    if "end_sec" not in normalized and "end" in normalized:
-        normalized["end_sec"] = normalized.pop("end")
+    if "start" in normalized:
+        normalized.setdefault("start_sec", normalized.pop("start"))
+    if "end" in normalized:
+        normalized.setdefault("end_sec", normalized.pop("end"))
     return normalized
 
 

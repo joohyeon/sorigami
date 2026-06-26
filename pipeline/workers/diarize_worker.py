@@ -24,7 +24,6 @@ def _diarize_impl(wav_path: str, num_speakers: int = 2) -> list[dict]:
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
         use_auth_token=True,
-        cache_dir="/models/pyannote",
     )
     diarization = pipeline(wav_path, num_speakers=num_speakers)
     speaker_map: dict[str, str] = {}

@@ -1,4 +1,5 @@
 import os
+import secrets
 import sys
 import time
 import argparse
@@ -60,7 +61,7 @@ def main():
         try:
             new_user = supabase.auth.admin.create_user({
                 "email": f"test-{uuid4()}@example.com",
-                "password": "super-secret-password-123",
+                "password": secrets.token_urlsafe(24),
                 "email_confirm": True
             })
             user_id = new_user.user.id
