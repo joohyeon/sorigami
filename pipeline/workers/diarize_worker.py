@@ -58,18 +58,22 @@ def _wav_duration_seconds(wav_path: str) -> float:
 def diarize_local(wav_path: str, num_speakers: int = 2) -> list[dict]:
     """Deterministic local diarization with graceful degradation.
 
-    Tries pyannote locally; if pyannote/torch are not installed (the common
-    case on a dev machine without the GPU stack), it falls back to a single
-    speaker "A" covering the whole file. This keeps the pipeline moving to
-    skill extraction instead of failing — speaker attribution is "best effort"
-    here, and skills still run against the transcript.
+    Tries pyannote locally; only when pyannote/torch are **not installed**
+    (`ImportError` — the common case on a dev machine without the GPU stack)
+    does it fall back to a single speaker "A" covering the whole file, tagged
+    `degraded: True` so callers can tell diarization did not actually run.
+
+    Other failures — a missing/invalid HF token, a corrupt model cache, a
+    malformed WAV, CUDA OOM — surface as `OSError`/`RuntimeError` from pyannote
+    and are deliberately **propagated**, not masked, so the job fails loudly
+    instead of recording a fabricated single-speaker result.
     """
     try:
         return _diarize_impl(wav_path, num_speakers=num_speakers)
-    except (ImportError, OSError, RuntimeError) as exc:  # pyannote/torch missing or model unavailable
+    except ImportError as exc:  # torch/pyannote genuinely absent (dev box without GPU stack)
         duration = _wav_duration_seconds(wav_path)
-        print(f"[diarize_local] falling back to single speaker ({exc})")
-        return [{"start": 0.0, "end": duration, "speaker": _SPEAKER_LABELS[0]}]
+        print(f"[diarize_local] pyannote/torch unavailable; degrading to single speaker ({exc})")
+        return [{"start": 0.0, "end": duration, "speaker": _SPEAKER_LABELS[0], "degraded": True}]
 
 
 def main(argv: list[str] | None = None) -> int:

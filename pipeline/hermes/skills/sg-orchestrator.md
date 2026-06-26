@@ -27,8 +27,15 @@ Transcription and diarization are provided as **deterministic local CLIs** — r
 
 **Hard rules — do not deviate:**
 - Use `.venv/bin/python` for every command.
-- Run ONLY the provided CLIs. Do **not** write your own scripts, do **not** use Modal,
-  do **not** `pip install` anything, do **not** invent alternative transcription paths.
+- For **download, transcription, and diarization**, run ONLY the provided CLIs
+  (`tools.sg_drive_download`, `workers.whisper_worker`, `workers.diarize_worker`)
+  exactly as written below. Do **not** reimplement them, do **not** use Modal, do
+  **not** `pip install` anything, do **not** invent alternative transcription paths.
+- For **Supabase writes and notifications**, call the provided helper functions in the
+  `tools/` package — `tools.sg_supabase_write` (`update_job_status`, `write_utterances`,
+  `write_speakers`, `write_skill_result`, `write_action_log`) and `tools.sg_notify_fcm`
+  (`send_fcm`). These are library functions (no CLI); invoke them with a short
+  `.venv/bin/python -c "..."` one-liner. Do not hand-roll Supabase REST calls.
 - Use `<job_id>` from the context for all `/tmp/sg-job-<job_id>.*` paths.
 
 ## Pipeline Stages
@@ -61,9 +68,13 @@ Execute these stages in order. Write job status to Supabase before and after eac
    ```
    .venv/bin/python -m workers.diarize_worker /tmp/sg-job-<job_id>.wav --out /tmp/sg-job-<job_id>.speakers.json
    ```
-2. Read the speakers JSON. Assign each utterance a `speaker_id` by time overlap with the
-   speaker segments (with a single speaker, every utterance gets that speaker).
-3. Write distinct speakers to `sg_speakers`, update utterances with `speaker_id`.
+2. Read the speakers JSON and collect the distinct speaker labels (e.g. `"A"`, `"B"`).
+3. Write the distinct speakers with `write_speakers(job_id, [{"label": ...}, ...])`. It
+   **returns the inserted rows including their generated `id`** — build a
+   `label → id` map from the return value.
+4. Assign each utterance a `speaker_id` by time overlap with the speaker segments,
+   resolving the label to its `id` via that map (with a single speaker, every utterance
+   gets that speaker's `id`). Update the utterances accordingly.
 
 ### Stage 3: Propose Plan
 1. Build a plan listing all approved stages: speaker assignment checkpoint, each skill by name, each integration action by destination

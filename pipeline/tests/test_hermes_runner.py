@@ -37,6 +37,31 @@ def test_launch_hermes_spawns_subprocess():
     assert mock_thread.call_args.kwargs.get("daemon") is True
 
 
+def _monitor_with_status(job_status: str):
+    """Run runner._monitor for a process that exited 0, with the job currently in
+    `job_status`, and return the list of statuses written via update_job_status."""
+    from hermes import runner
+    proc = MagicMock(returncode=0)
+    log = MagicMock()
+    client = MagicMock()
+    (client.table.return_value.select.return_value.eq.return_value
+     .maybe_single.return_value.execute.return_value) = MagicMock(data={"status": job_status})
+    with patch("supabase_client.get_supabase", return_value=client), \
+         patch("hermes.runner.update_job_status") as mock_update:
+        runner._monitor(proc, "job-1", log)
+    return [c.args[1] for c in mock_update.call_args_list]
+
+
+def test_monitor_marks_failed_when_hermes_exits_zero_before_completion():
+    # Hermes exited 0 but the orchestrator never reached `complete` → safety net fails it.
+    assert "failed" in _monitor_with_status("analyzing")
+
+
+def test_monitor_leaves_completed_job_untouched():
+    # Orchestrator already set `complete`; the monitor must not touch it.
+    assert _monitor_with_status("complete") == []
+
+
 def test_launch_hermes_inlines_orchestrator_skill_into_prompt():
     """The orchestrator instructions must travel in the -z prompt itself.
 

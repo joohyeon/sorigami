@@ -51,11 +51,18 @@ def write_utterances(job_id: str, utterances: list[dict]) -> None:
         raise RuntimeError(f"Supabase write failed (write_utterances {job_id}): {exc}") from exc
 
 
-def write_speakers(job_id: str, speakers: list[dict]) -> None:
+def write_speakers(job_id: str, speakers: list[dict]) -> list[dict]:
+    """Insert speakers and return the inserted rows (including generated `id`s).
+
+    The orchestrator needs the `id` of each row to map diarization labels (e.g.
+    "A") to `sg_speakers.id` when populating `sg_utterances.speaker_id`, so the
+    inserted rows are returned rather than discarded.
+    """
     try:
         client = _client()
         rows = [{"job_id": job_id, **s} for s in speakers]
-        client.table("sg_speakers").insert(rows).execute()
+        result = client.table("sg_speakers").insert(rows).execute()
+        return result.data or []
     except Exception as exc:
         raise RuntimeError(f"Supabase write failed (write_speakers {job_id}): {exc}") from exc
 

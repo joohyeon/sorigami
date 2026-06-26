@@ -99,6 +99,47 @@ def test_diarize_local_falls_back_to_single_speaker(tmp_path):
     assert result[0]["speaker"] == "A"
     assert result[0]["start"] == 0.0
     assert abs(result[0]["end"] - 3.0) < 0.1
+    # Degraded output must be tagged so downstream/users can tell diarization
+    # did not actually run.
+    assert result[0]["degraded"] is True
+
+
+def test_diarize_local_propagates_real_errors(tmp_path):
+    """A RuntimeError/OSError (bad audio, missing HF token, CUDA OOM, corrupt
+    model) must NOT be masked as a single-speaker success — it must propagate so
+    the job fails loudly instead of shipping wrong speaker attribution."""
+    import wave
+    wav = tmp_path / "a.wav"
+    with wave.open(str(wav), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x00" * 16000)
+
+    with patch("workers.diarize_worker.Pipeline.from_pretrained",
+               side_effect=RuntimeError("HF auth token invalid")):
+        from workers.diarize_worker import diarize_local
+        with pytest.raises(RuntimeError, match="HF auth token invalid"):
+            diarize_local(str(wav))
+
+
+def test_diarize_cli_writes_json(tmp_path):
+    """`python -m workers.diarize_worker <wav> --out <json>` writes speaker JSON
+    (exercises the fallback path end-to-end, no mocking of duration)."""
+    import wave
+    wav = tmp_path / "a.wav"
+    with wave.open(str(wav), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x00" * 16000 * 2)
+    out = tmp_path / "spk.json"
+    with patch("workers.diarize_worker.Pipeline.from_pretrained", side_effect=ImportError("x")):
+        from workers.diarize_worker import main
+        main([str(wav), "--out", str(out)])
+    data = json.loads(out.read_text())
+    assert data[0]["speaker"] == "A"
+    assert data[0]["degraded"] is True
 
 
 def test_download_audio_calls_drive_api():
@@ -120,7 +161,7 @@ def test_drive_download_cli_downloads_and_converts_to_wav(tmp_path):
     """`python -m tools.sg_drive_download <id> --out x.wav` downloads then ffmpegs to WAV."""
     out_wav = tmp_path / "audio.wav"
     with patch("tools.sg_drive_download.download_audio", return_value=str(out_wav) + ".src") as mock_dl, \
-         patch("tools.sg_drive_download.subprocess.run") as mock_run, \
+         patch("tools.sg_drive_download.subprocess.run", return_value=MagicMock(returncode=0, stderr="")) as mock_run, \
          patch.dict(os.environ, {"GOOGLE_SERVICE_ACCOUNT_JSON": json.dumps({"type": "service_account"})}):
         from tools.sg_drive_download import main
         rc = main(["file123", "--out", str(out_wav)])
@@ -130,6 +171,44 @@ def test_drive_download_cli_downloads_and_converts_to_wav(tmp_path):
     ffmpeg_cmd = mock_run.call_args[0][0]
     assert ffmpeg_cmd[0] == "ffmpeg"
     assert str(out_wav) in ffmpeg_cmd
+
+
+def test_drive_download_cli_surfaces_ffmpeg_stderr(tmp_path):
+    """A failed ffmpeg conversion must raise an error that includes ffmpeg's
+    stderr — not an opaque non-zero-exit message — so the orchestrator can act."""
+    out_wav = tmp_path / "audio.wav"
+    with patch("tools.sg_drive_download.download_audio", return_value=str(out_wav) + ".src"), \
+         patch("tools.sg_drive_download.subprocess.run",
+               return_value=MagicMock(returncode=1, stderr="Invalid data found when processing input")), \
+         patch.dict(os.environ, {"GOOGLE_SERVICE_ACCOUNT_JSON": json.dumps({"type": "service_account"})}):
+        from tools.sg_drive_download import main
+        with pytest.raises(RuntimeError, match="Invalid data found"):
+            main(["file123", "--out", str(out_wav)])
+
+
+def test_drive_download_cli_cleans_up_src_file(tmp_path):
+    """The downloaded .src intermediate must be removed (even though conversion
+    succeeded) so /tmp does not fill with full recordings."""
+    out_wav = tmp_path / "audio.wav"
+    src = str(out_wav) + ".src"
+
+    def fake_dl(file_id, dest, creds):
+        with open(dest, "wb") as f:
+            f.write(b"raw")
+        return dest
+
+    with patch("tools.sg_drive_download.download_audio", side_effect=fake_dl), \
+         patch("tools.sg_drive_download.subprocess.run", return_value=MagicMock(returncode=0, stderr="")), \
+         patch.dict(os.environ, {"GOOGLE_SERVICE_ACCOUNT_JSON": json.dumps({"type": "service_account"})}):
+        from tools.sg_drive_download import main
+        main(["file123", "--out", str(out_wav)])
+    assert not os.path.exists(src)
+
+
+def test_drive_download_cli_missing_creds_returns_1(tmp_path):
+    with patch.dict(os.environ, {}, clear=True):
+        from tools.sg_drive_download import main
+        assert main(["file123", "--out", str(tmp_path / "a.wav")]) == 1
 
 
 def test_update_job_status(mock_supabase_client):
@@ -145,6 +224,27 @@ def test_write_utterances_translates_start_end_fields(mock_supabase_client):
     write_utterances("job-123", [{"start": 1.25, "end": 2.5, "text": "hello"}])
     insert_arg = mock_supabase_client.table.return_value.insert.call_args[0][0]
     assert insert_arg == [{"job_id": "job-123", "start_sec": 1.25, "end_sec": 2.5, "text": "hello"}]
+
+
+def test_normalize_utterance_passthrough_and_extra_keys():
+    from tools.sg_supabase_write import _normalize_utterance
+    # An already-normalized row is left untouched (no double-translation).
+    already = {"start_sec": 1.0, "end_sec": 2.0, "text": "hi", "speaker_id": "uuid-x"}
+    assert _normalize_utterance(already) == already
+    # Translation preserves unrelated keys (e.g. speaker label).
+    out = _normalize_utterance({"start": 1.0, "end": 2.0, "text": "hi", "speaker": "A"})
+    assert out == {"start_sec": 1.0, "end_sec": 2.0, "text": "hi", "speaker": "A"}
+
+
+def test_write_speakers_returns_inserted_rows(mock_supabase_client):
+    """write_speakers must return the inserted rows (with their generated ids)
+    so the orchestrator can map diarization labels → sg_speakers.id for
+    populating utterance.speaker_id."""
+    from tools.sg_supabase_write import write_speakers
+    inserted = [{"id": "uuid-1", "job_id": "job-1", "label": "A"}]
+    mock_supabase_client.table.return_value.insert.return_value.execute.return_value = MagicMock(data=inserted)
+    result = write_speakers("job-1", [{"label": "A"}])
+    assert result == inserted
 
 
 def test_send_fcm_notification():

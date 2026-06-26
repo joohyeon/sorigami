@@ -56,14 +56,25 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     src_path = args.out + ".src"
-    download_audio(args.file_id, src_path, creds_json)
-    # Convert whatever container/codec Drive returned into pipeline-standard WAV.
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", src_path, "-ar", "16000", "-ac", "1", args.out],
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        download_audio(args.file_id, src_path, creds_json)
+        # Convert whatever container/codec Drive returned into pipeline-standard WAV.
+        # Capture stderr so a conversion failure produces an actionable error the
+        # orchestrator can log, instead of an opaque non-zero exit.
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-i", src_path, "-ar", "16000", "-ac", "1", args.out],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            tail = (proc.stderr or "").strip()[-2000:]
+            raise RuntimeError(f"ffmpeg conversion failed (exit {proc.returncode}): {tail}")
+    finally:
+        # The downloaded original can be large (full recording); never leave it behind.
+        try:
+            os.remove(src_path)
+        except OSError:
+            pass
     print(f"downloaded + converted → {args.out}", file=sys.stderr)
     return 0
 
