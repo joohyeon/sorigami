@@ -18,21 +18,63 @@ The job context is provided as JSON in your prompt. It contains:
 - Supabase credentials (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) are available as environment variables — do not look for them in the context JSON
 - Google credentials (`GOOGLE_SERVICE_ACCOUNT_JSON`) are available as environment variables
 
+## Execution Environment (read first)
+
+You run on the pipeline server host, with the current working directory set to the
+pipeline project root (the directory containing `workers/`, `tools/`, and `.venv/`).
+Transcription and diarization are provided as **deterministic local CLIs** — run them
+**exactly** as written below using the project virtualenv.
+
+**Hard rules — do not deviate:**
+- Use `.venv/bin/python` for every command.
+- For **download, transcription, and diarization**, run ONLY the provided CLIs
+  (`tools.sg_drive_download`, `workers.whisper_worker`, `workers.diarize_worker`)
+  exactly as written below. Do **not** reimplement them, do **not** use Modal, do
+  **not** `pip install` anything, do **not** invent alternative transcription paths.
+- For **Supabase writes and notifications**, call the provided helper functions in the
+  `tools/` package — `tools.sg_supabase_write` (`update_job_status`, `write_utterances`,
+  `write_speakers`, `write_skill_result`, `write_action_log`) and `tools.sg_notify_fcm`
+  (`send_fcm`). These are library functions (no CLI); invoke them with a short
+  `.venv/bin/python -c "..."` one-liner. Do not hand-roll Supabase REST calls.
+- Use `<job_id>` from the context for all `/tmp/sg-job-<job_id>.*` paths.
+
 ## Pipeline Stages
 
 Execute these stages in order. Write job status to Supabase before and after each stage.
 
 ### Stage 1: Download & Transcribe
-1. Set job status → `analyzing`
-2. Download audio from Google Drive using `sg-drive-download`
-3. Transcribe with `sg-whisper-transcribe` (language=ko, faster-whisper large-v3)
-4. Write utterances to `sg_utterances` via `sg-supabase-write`
-5. Write raw Whisper output to `sg_transcript_raw`
+1. Set job status → `analyzing` (via `sg-supabase-write`).
+2. Download the Drive audio and convert it to WAV:
+   ```
+   .venv/bin/python -m tools.sg_drive_download <drive_file_id> --out /tmp/sg-job-<job_id>.wav
+   ```
+3. Transcribe locally (CPU, deterministic). This writes a JSON array of
+   `{start, end, text, avg_logprob}`:
+   ```
+   .venv/bin/python -m workers.whisper_worker /tmp/sg-job-<job_id>.wav --out /tmp/sg-job-<job_id>.transcript.json --language ko --model large-v3
+   ```
+   **This can take 30–90 minutes for a long recording. That is expected and is NOT a
+   failure.** Run it in the background and poll the process until it exits. Do not abort
+   it, do not start a second transcription, and do not set the job to `failed` while it
+   is still running.
+4. Read `/tmp/sg-job-<job_id>.transcript.json` and write each segment as a row to
+   `sg_utterances` (`job_id`, `start`, `end`, `text`) via `sg-supabase-write`.
+5. Write the full transcript JSON to `sg_transcript_raw`.
 
 ### Stage 2: Diarize
-1. Run `sg-diarize` on the WAV file
-2. Merge diarization with utterances — assign `speaker_id` to each utterance
-3. Write speakers to `sg_speakers`, update utterances with `speaker_id`
+1. Run diarization locally. If the GPU stack (torch/pyannote) is unavailable it
+   automatically degrades to a single speaker "A" covering the whole file — that is an
+   **acceptable, non-failing** outcome:
+   ```
+   .venv/bin/python -m workers.diarize_worker /tmp/sg-job-<job_id>.wav --out /tmp/sg-job-<job_id>.speakers.json
+   ```
+2. Read the speakers JSON and collect the distinct speaker labels (e.g. `"A"`, `"B"`).
+3. Write the distinct speakers with `write_speakers(job_id, [{"label": ...}, ...])`. It
+   **returns the inserted rows including their generated `id`** — build a
+   `label → id` map from the return value.
+4. Assign each utterance a `speaker_id` by time overlap with the speaker segments,
+   resolving the label to its `id` via that map (with a single speaker, every utterance
+   gets that speaker's `id`). Update the utterances accordingly.
 
 ### Stage 3: Propose Plan
 1. Build a plan listing all approved stages: speaker assignment checkpoint, each skill by name, each integration action by destination
@@ -70,6 +112,13 @@ For each integration action in each skill:
 2. Send FCM push: "Your results are ready"
 
 ## Error Handling
-- If any stage fails, set job status → `failed`, write `error` field, send FCM push with error message
-- Retry transient failures (network, Modal) up to 3 times before failing
-- User can skip a checkpoint without failing the job (checkpoint_json will contain `{"skipped": true}`)
+- **A slow or long-running command is NOT a failure.** Never set status → `failed`
+  because transcription is still running or is taking many minutes. Wait for the process
+  to exit and check its exit code.
+- Only set status → `failed` after a command **exits non-zero** AND you have re-run that
+  exact command up to 3 times. Put the command's stderr in the `error` field.
+- Do **not** mark the job failed for recoverable conditions (a missing optional
+  dependency, a transient network blip, diarization degrading to one speaker). Retry the
+  exact provided command instead of switching approaches.
+- User can skip a checkpoint without failing the job (`checkpoint_json` will contain
+  `{"skipped": true}`).
