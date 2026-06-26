@@ -8,11 +8,14 @@ JOB_PAYLOAD = {
     "user_id": str(uuid4()),
 }
 
+
 def test_create_job(client, mock_supabase):
+    # Insert returns the new job row
     mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [
         {"id": "abc-123", "status": "submitted", "drive_file_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"}
     ]
-    mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
+    # Mode lookup uses maybe_single() (changed from single())
+    mock_supabase.table.return_value.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
         "id": JOB_PAYLOAD["mode_id"], "name": "Test Mode", "skill_ids": []
     }
     env = {
@@ -26,6 +29,7 @@ def test_create_job(client, mock_supabase):
     body = response.json()
     assert body["status"] == "submitted"
     assert "job_id" in body
+
 
 def test_get_job(client, mock_supabase):
     job_id = str(uuid4())
@@ -43,6 +47,7 @@ def test_get_job(client, mock_supabase):
     assert body["plan"] is None
     assert body["checkpoint"] is None
 
+
 def test_get_job_results(client, mock_supabase):
     mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
     response = client.get("/jobs/test-job-id/results")
@@ -51,12 +56,16 @@ def test_get_job_results(client, mock_supabase):
     assert "skill_results" in body
     assert "action_logs" in body
 
+
 def test_confirm_job_not_found(client, mock_supabase):
-    mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+    # confirm_job checks existence with maybe_single()
+    mock_supabase.table.return_value.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = None
     response = client.post("/jobs/missing-id/confirm", json={"approved_steps": [], "per_step_overrides": {}})
     assert response.status_code == 404
 
+
 def test_checkpoint_not_found(client, mock_supabase):
-    mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+    # resolve_checkpoint checks existence with maybe_single()
+    mock_supabase.table.return_value.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = None
     response = client.post("/jobs/missing-id/checkpoint", json={"data": {}})
     assert response.status_code == 404

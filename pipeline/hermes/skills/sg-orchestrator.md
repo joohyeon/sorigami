@@ -14,8 +14,9 @@ The job context is provided as JSON in your prompt. It contains:
 - `drive_file_id` — Google Drive file ID for the audio
 - `mode_name` — the recording Mode (e.g. "Team Meeting")
 - `skills` — array of `{skill_name, ai_prompt, integration_actions}` to run
-- `supabase_url`, `supabase_service_role_key` — for state writes
-- `fcm_server_key`, `fcm_device_token` — for push notifications
+- `fcm_device_token` — for push notifications
+- Supabase credentials (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) are available as environment variables — do not look for them in the context JSON
+- Google credentials (`GOOGLE_SERVICE_ACCOUNT_JSON`) are available as environment variables
 
 ## Pipeline Stages
 
