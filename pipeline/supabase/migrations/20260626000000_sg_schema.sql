@@ -96,3 +96,11 @@ insert into sg_skills (name, description, ai_prompt, is_default) values
   ('Action Items', 'Extract tasks and owners', 'Extract all action items from the transcript. For each item return: text (the task), owner (speaker name if mentioned, else null). Return as JSON array: [{"text":"...","owner":"..."}]', true),
   ('Decisions', 'Key decisions made', 'List all decisions made during the conversation. Return as a JSON array of strings: ["Decision 1","Decision 2"]', true),
   ('Sentiment', 'Speaker tone analysis', 'Analyse the tone of each speaker. Return JSON: {"Speaker A": "positive|neutral|negative", "Speaker B": "positive|neutral|negative"}', true);
+
+-- Indexes on high-query FK columns
+create index on sg_jobs (user_id);
+create index on sg_speakers (job_id);
+create index on sg_utterances (job_id);
+create index on sg_utterances (speaker_id);
+create index on sg_skill_results (job_id);
+create index on sg_action_logs (job_id);
