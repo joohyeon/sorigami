@@ -56,7 +56,7 @@ if _modal_available:
             word_timestamps=False,
         )
         return [
-            {"start": s.start, "end": s.end, "text": s.text.strip(), "avg_logprob": s.avg_logprob}
+            {"start": round(s.start, 3), "end": round(s.end, 3), "text": s.text.strip(), "avg_logprob": round(s.avg_logprob, 6)}
             for s in segments
         ]
 
@@ -82,6 +82,6 @@ else:
             word_timestamps=False,
         )
         return [
-            {"start": s.start, "end": s.end, "text": s.text.strip(), "avg_logprob": s.avg_logprob}
+            {"start": round(s.start, 3), "end": round(s.end, 3), "text": s.text.strip(), "avg_logprob": round(s.avg_logprob, 6)}
             for s in segments
         ]
