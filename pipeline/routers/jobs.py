@@ -1,6 +1,5 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
-from uuid import uuid4
 from models import CreateJobRequest, ConfirmJobRequest, CheckpointRequest
 from supabase_client import get_supabase
 
@@ -31,8 +30,27 @@ def get_job(job_id: str, db=Depends(get_supabase)):
         "error": row.get("error"),
     }
 
+@router.get("/{job_id}/results")
+def get_job_results(job_id: str, db=Depends(get_supabase)):
+    result = (
+        db.table("sg_skill_results")
+        .select("*")
+        .eq("job_id", job_id)
+        .execute()
+    )
+    action_logs = (
+        db.table("sg_action_logs")
+        .select("*")
+        .eq("job_id", job_id)
+        .execute()
+    )
+    return {"skill_results": result.data, "action_logs": action_logs.data}
+
 @router.post("/{job_id}/confirm")
 def confirm_job(job_id: str, body: ConfirmJobRequest, db=Depends(get_supabase)):
+    check = db.table("sg_jobs").select("id").eq("id", job_id).execute()
+    if not check.data:
+        raise HTTPException(status_code=404, detail="Job not found")
     db.table("sg_jobs").update({
         "status": "executing",
         "plan_json": {"approved_steps": body.approved_steps, "overrides": body.per_step_overrides},
@@ -41,6 +59,9 @@ def confirm_job(job_id: str, body: ConfirmJobRequest, db=Depends(get_supabase)):
 
 @router.post("/{job_id}/checkpoint")
 def resolve_checkpoint(job_id: str, body: CheckpointRequest, db=Depends(get_supabase)):
+    check = db.table("sg_jobs").select("id").eq("id", job_id).execute()
+    if not check.data:
+        raise HTTPException(status_code=404, detail="Job not found")
     db.table("sg_jobs").update({
         "status": "executing",
         "checkpoint_json": body.data,
