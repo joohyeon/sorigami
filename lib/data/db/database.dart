@@ -61,6 +61,8 @@ class Skills extends Table {
   TextColumn get outputLanguage =>
       text().withDefault(const Constant('auto'))();
   TextColumn get additionalInstructions => text().nullable()();
+  BoolColumn get requireReview =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -87,5 +89,15 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.open() : super(openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(skills, skills.requireReview);
+          }
+        },
+      );
 }

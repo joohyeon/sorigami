@@ -1503,6 +1503,21 @@ class $SkillsTable extends Skills with TableInfo<$SkillsTable, Skill> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _requireReviewMeta = const VerificationMeta(
+    'requireReview',
+  );
+  @override
+  late final GeneratedColumn<bool> requireReview = GeneratedColumn<bool>(
+    'require_review',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("require_review" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1527,6 +1542,7 @@ class $SkillsTable extends Skills with TableInfo<$SkillsTable, Skill> {
     tone,
     outputLanguage,
     additionalInstructions,
+    requireReview,
     createdAt,
   ];
   @override
@@ -1614,6 +1630,15 @@ class $SkillsTable extends Skills with TableInfo<$SkillsTable, Skill> {
         ),
       );
     }
+    if (data.containsKey('require_review')) {
+      context.handle(
+        _requireReviewMeta,
+        requireReview.isAcceptableOrUnknown(
+          data['require_review']!,
+          _requireReviewMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1677,6 +1702,10 @@ class $SkillsTable extends Skills with TableInfo<$SkillsTable, Skill> {
         DriftSqlType.string,
         data['${effectivePrefix}additional_instructions'],
       ),
+      requireReview: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}require_review'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1705,6 +1734,7 @@ class Skill extends DataClass implements Insertable<Skill> {
   final String tone;
   final String outputLanguage;
   final String? additionalInstructions;
+  final bool requireReview;
   final DateTime createdAt;
   const Skill({
     required this.id,
@@ -1718,6 +1748,7 @@ class Skill extends DataClass implements Insertable<Skill> {
     required this.tone,
     required this.outputLanguage,
     this.additionalInstructions,
+    required this.requireReview,
     required this.createdAt,
   });
   @override
@@ -1744,6 +1775,7 @@ class Skill extends DataClass implements Insertable<Skill> {
     if (!nullToAbsent || additionalInstructions != null) {
       map['additional_instructions'] = Variable<String>(additionalInstructions);
     }
+    map['require_review'] = Variable<bool>(requireReview);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -1767,6 +1799,7 @@ class Skill extends DataClass implements Insertable<Skill> {
       additionalInstructions: additionalInstructions == null && nullToAbsent
           ? const Value.absent()
           : Value(additionalInstructions),
+      requireReview: Value(requireReview),
       createdAt: Value(createdAt),
     );
   }
@@ -1792,6 +1825,7 @@ class Skill extends DataClass implements Insertable<Skill> {
       additionalInstructions: serializer.fromJson<String?>(
         json['additionalInstructions'],
       ),
+      requireReview: serializer.fromJson<bool>(json['requireReview']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1812,6 +1846,7 @@ class Skill extends DataClass implements Insertable<Skill> {
       'additionalInstructions': serializer.toJson<String?>(
         additionalInstructions,
       ),
+      'requireReview': serializer.toJson<bool>(requireReview),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1828,6 +1863,7 @@ class Skill extends DataClass implements Insertable<Skill> {
     String? tone,
     String? outputLanguage,
     Value<String?> additionalInstructions = const Value.absent(),
+    bool? requireReview,
     DateTime? createdAt,
   }) => Skill(
     id: id ?? this.id,
@@ -1843,6 +1879,7 @@ class Skill extends DataClass implements Insertable<Skill> {
     additionalInstructions: additionalInstructions.present
         ? additionalInstructions.value
         : this.additionalInstructions,
+    requireReview: requireReview ?? this.requireReview,
     createdAt: createdAt ?? this.createdAt,
   );
   Skill copyWithCompanion(SkillsCompanion data) {
@@ -1870,6 +1907,9 @@ class Skill extends DataClass implements Insertable<Skill> {
       additionalInstructions: data.additionalInstructions.present
           ? data.additionalInstructions.value
           : this.additionalInstructions,
+      requireReview: data.requireReview.present
+          ? data.requireReview.value
+          : this.requireReview,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1888,6 +1928,7 @@ class Skill extends DataClass implements Insertable<Skill> {
           ..write('tone: $tone, ')
           ..write('outputLanguage: $outputLanguage, ')
           ..write('additionalInstructions: $additionalInstructions, ')
+          ..write('requireReview: $requireReview, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1906,6 +1947,7 @@ class Skill extends DataClass implements Insertable<Skill> {
     tone,
     outputLanguage,
     additionalInstructions,
+    requireReview,
     createdAt,
   );
   @override
@@ -1923,6 +1965,7 @@ class Skill extends DataClass implements Insertable<Skill> {
           other.tone == this.tone &&
           other.outputLanguage == this.outputLanguage &&
           other.additionalInstructions == this.additionalInstructions &&
+          other.requireReview == this.requireReview &&
           other.createdAt == this.createdAt);
 }
 
@@ -1938,6 +1981,7 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
   final Value<String> tone;
   final Value<String> outputLanguage;
   final Value<String?> additionalInstructions;
+  final Value<bool> requireReview;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const SkillsCompanion({
@@ -1952,6 +1996,7 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
     this.tone = const Value.absent(),
     this.outputLanguage = const Value.absent(),
     this.additionalInstructions = const Value.absent(),
+    this.requireReview = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1967,6 +2012,7 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
     this.tone = const Value.absent(),
     this.outputLanguage = const Value.absent(),
     this.additionalInstructions = const Value.absent(),
+    this.requireReview = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1984,6 +2030,7 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
     Expression<String>? tone,
     Expression<String>? outputLanguage,
     Expression<String>? additionalInstructions,
+    Expression<bool>? requireReview,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -2000,6 +2047,7 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
       if (outputLanguage != null) 'output_language': outputLanguage,
       if (additionalInstructions != null)
         'additional_instructions': additionalInstructions,
+      if (requireReview != null) 'require_review': requireReview,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2017,6 +2065,7 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
     Value<String>? tone,
     Value<String>? outputLanguage,
     Value<String?>? additionalInstructions,
+    Value<bool>? requireReview,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -2033,6 +2082,7 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
       outputLanguage: outputLanguage ?? this.outputLanguage,
       additionalInstructions:
           additionalInstructions ?? this.additionalInstructions,
+      requireReview: requireReview ?? this.requireReview,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2078,6 +2128,9 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
         additionalInstructions.value,
       );
     }
+    if (requireReview.present) {
+      map['require_review'] = Variable<bool>(requireReview.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2101,6 +2154,7 @@ class SkillsCompanion extends UpdateCompanion<Skill> {
           ..write('tone: $tone, ')
           ..write('outputLanguage: $outputLanguage, ')
           ..write('additionalInstructions: $additionalInstructions, ')
+          ..write('requireReview: $requireReview, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3055,6 +3109,7 @@ typedef $$SkillsTableCreateCompanionBuilder =
       Value<String> tone,
       Value<String> outputLanguage,
       Value<String?> additionalInstructions,
+      Value<bool> requireReview,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -3071,6 +3126,7 @@ typedef $$SkillsTableUpdateCompanionBuilder =
       Value<String> tone,
       Value<String> outputLanguage,
       Value<String?> additionalInstructions,
+      Value<bool> requireReview,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -3137,6 +3193,11 @@ class $$SkillsTableFilterComposer
 
   ColumnFilters<String> get additionalInstructions => $composableBuilder(
     column: $table.additionalInstructions,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get requireReview => $composableBuilder(
+    column: $table.requireReview,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3210,6 +3271,11 @@ class $$SkillsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get requireReview => $composableBuilder(
+    column: $table.requireReview,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -3271,6 +3337,11 @@ class $$SkillsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get requireReview => $composableBuilder(
+    column: $table.requireReview,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
@@ -3314,6 +3385,7 @@ class $$SkillsTableTableManager
                 Value<String> tone = const Value.absent(),
                 Value<String> outputLanguage = const Value.absent(),
                 Value<String?> additionalInstructions = const Value.absent(),
+                Value<bool> requireReview = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SkillsCompanion(
@@ -3328,6 +3400,7 @@ class $$SkillsTableTableManager
                 tone: tone,
                 outputLanguage: outputLanguage,
                 additionalInstructions: additionalInstructions,
+                requireReview: requireReview,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -3344,6 +3417,7 @@ class $$SkillsTableTableManager
                 Value<String> tone = const Value.absent(),
                 Value<String> outputLanguage = const Value.absent(),
                 Value<String?> additionalInstructions = const Value.absent(),
+                Value<bool> requireReview = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => SkillsCompanion.insert(
@@ -3358,6 +3432,7 @@ class $$SkillsTableTableManager
                 tone: tone,
                 outputLanguage: outputLanguage,
                 additionalInstructions: additionalInstructions,
+                requireReview: requireReview,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
