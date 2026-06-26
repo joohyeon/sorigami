@@ -17,6 +17,29 @@ def test_list_skills(client, mock_supabase):
     assert isinstance(response.json(), list)
 
 def test_delete_skill(client, mock_supabase):
+    skill_id = str(uuid4())
+    mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+        {"id": skill_id, "is_default": False, "user_id": "user-123"}
+    ]
     mock_supabase.table.return_value.delete.return_value.eq.return_value.execute.return_value.data = []
-    response = client.delete(f"/skills/{uuid4()}")
+    response = client.delete(f"/skills/{skill_id}")
     assert response.status_code == 204
+
+def test_update_default_skill_forbidden(client, mock_supabase):
+    mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+        {"id": "skill-1", "is_default": True, "user_id": None}
+    ]
+    response = client.put("/skills/skill-1", json={"name": "New Name"})
+    assert response.status_code == 403
+
+def test_delete_default_skill_forbidden(client, mock_supabase):
+    mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
+        {"id": "skill-1", "is_default": True, "user_id": None}
+    ]
+    response = client.delete("/skills/skill-1")
+    assert response.status_code == 403
+
+def test_list_skills_with_user_id(client, mock_supabase):
+    mock_supabase.table.return_value.select.return_value.or_.return_value.execute.return_value.data = []
+    response = client.get("/skills?user_id=user-123")
+    assert response.status_code == 200

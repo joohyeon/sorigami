@@ -15,3 +15,8 @@ def test_list_modes(client, mock_supabase):
     response = client.get("/modes")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+def test_list_modes_with_user_id(client, mock_supabase):
+    mock_supabase.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+    response = client.get("/modes?user_id=user-123")
+    assert response.status_code == 200

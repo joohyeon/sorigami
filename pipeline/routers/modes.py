@@ -7,7 +7,11 @@ router = APIRouter(prefix="/modes", tags=["modes"])
 
 @router.get("")
 def list_modes(user_id: str | None = None, db=Depends(get_supabase)):
-    return db.table("sg_modes").select("*").execute().data
+    if user_id:
+        result = db.table("sg_modes").select("*").eq("user_id", user_id).execute()
+    else:
+        result = db.table("sg_modes").select("*").execute()
+    return result.data
 
 @router.post("", status_code=201)
 def create_mode(body: CreateModeRequest, user_id: str | None = None, db=Depends(get_supabase)):
