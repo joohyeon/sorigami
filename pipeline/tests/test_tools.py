@@ -292,3 +292,78 @@ def test_call_webhook():
         json={"key": "value"},
         timeout=15,
     )
+
+
+def test_compute_quality_good_score():
+    from tools.sg_quality import compute_quality
+    segments = [
+        {"start": 0.0, "end": 2.0, "text": "hello", "avg_logprob": -0.3},
+        {"start": 2.0, "end": 4.0, "text": "world", "avg_logprob": -0.4},
+    ]
+    q = compute_quality(segments)
+    assert q["transcript_score"] == "good"
+    assert q["avg_logprob"] == -0.35
+    assert q["segment_count"] == 2
+    assert q["low_confidence_count"] == 0
+    assert q["low_confidence_segments"] == []
+    assert q["diarization_degraded"] is False
+
+
+def test_compute_quality_fair_score():
+    from tools.sg_quality import compute_quality
+    segments = [
+        {"start": 0.0, "end": 2.0, "text": "a", "avg_logprob": -0.6},
+        {"start": 2.0, "end": 4.0, "text": "b", "avg_logprob": -0.7},
+    ]
+    q = compute_quality(segments)
+    assert q["transcript_score"] == "fair"
+
+
+def test_compute_quality_poor_score():
+    from tools.sg_quality import compute_quality
+    segments = [
+        {"start": 0.0, "end": 2.0, "text": "a", "avg_logprob": -0.9},
+        {"start": 2.0, "end": 4.0, "text": "b", "avg_logprob": -0.85},
+    ]
+    q = compute_quality(segments)
+    assert q["transcript_score"] == "poor"
+
+
+def test_compute_quality_surfaces_low_confidence_segments():
+    from tools.sg_quality import compute_quality
+    segs = [{"start": float(i), "end": float(i+1), "text": f"t{i}", "avg_logprob": -1.5 - i * 0.1}
+            for i in range(15)]
+    q = compute_quality(segs)
+    assert q["low_confidence_count"] == 15
+    # Only up to 10 worst segments are returned, sorted worst-first
+    assert len(q["low_confidence_segments"]) == 10
+    assert q["low_confidence_segments"][0]["avg_logprob"] <= q["low_confidence_segments"][-1]["avg_logprob"]
+
+
+def test_compute_quality_duration_from_last_segment_end():
+    from tools.sg_quality import compute_quality
+    segments = [
+        {"start": 0.0, "end": 10.0, "text": "hi", "avg_logprob": -0.3},
+        {"start": 10.0, "end": 25.5, "text": "bye", "avg_logprob": -0.4},
+    ]
+    q = compute_quality(segments)
+    assert q["duration_sec"] == 25.5
+
+
+def test_compute_quality_empty_segments():
+    from tools.sg_quality import compute_quality
+    q = compute_quality([])
+    assert q["transcript_score"] == "good"
+    assert q["avg_logprob"] == 0.0
+    assert q["segment_count"] == 0
+    assert q["duration_sec"] == 0.0
+
+
+def test_with_diarization_degraded():
+    from tools.sg_quality import compute_quality, with_diarization_degraded
+    q = compute_quality([{"start": 0.0, "end": 1.0, "text": "hi", "avg_logprob": -0.3}])
+    assert q["diarization_degraded"] is False
+    updated = with_diarization_degraded(q, True)
+    assert updated["diarization_degraded"] is True
+    # Original not mutated
+    assert q["diarization_degraded"] is False
