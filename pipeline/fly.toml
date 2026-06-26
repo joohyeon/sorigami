@@ -1,4 +1,4 @@
-app = "sg-pipeline"
+app = "sorigamis"
 primary_region = "nrt"
 
 [build]
