@@ -1,9 +1,35 @@
 from __future__ import annotations
 import json
 import httpx
-import google.auth
-import google.auth.transport.requests
-from google.oauth2 import service_account
+from types import SimpleNamespace
+
+try:
+    import google.auth
+    import google.auth.transport.requests
+    from google.oauth2 import service_account
+except ImportError:  # pragma: no cover - exercised in test envs without google libs
+    class _DummyRequest:
+        pass
+
+    google = SimpleNamespace(  # type: ignore[assignment]
+        auth=SimpleNamespace(
+            transport=SimpleNamespace(
+                requests=SimpleNamespace(Request=_DummyRequest)
+            )
+        )
+    )
+
+    class _DummyCredentials:
+        token = None
+
+        @classmethod
+        def from_service_account_info(cls, *args, **kwargs):
+            raise RuntimeError("google auth libraries are not installed")
+
+        def refresh(self, request):
+            raise RuntimeError("google auth libraries are not installed")
+
+    service_account = SimpleNamespace(Credentials=_DummyCredentials)  # type: ignore[assignment]
 
 
 def send_fcm(device_token: str, title: str, body: str, creds_json: str) -> None:

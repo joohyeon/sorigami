@@ -48,6 +48,59 @@ def test_diarize_returns_speaker_segments():
     assert result[0]["start"] == 0.0
 
 
+def test_transcribe_local_uses_cpu_int8():
+    """The deterministic local path must run faster-whisper on CPU (int8), no CUDA."""
+    mock_segment = MagicMock(start=0.0, end=2.5, text=" 안녕 ", avg_logprob=-0.3)
+    mock_model = MagicMock()
+    mock_model.transcribe.return_value = ([mock_segment], MagicMock(language="ko"))
+
+    with patch("workers.whisper_worker.WhisperModel", return_value=mock_model) as mk:
+        from workers.whisper_worker import transcribe_local
+        result = transcribe_local("/tmp/test.wav", language="ko", model_size="small")
+
+    # Model constructed for CPU/int8 with the requested size
+    args, kwargs = mk.call_args
+    assert (args and args[0] == "small") or kwargs.get("model_size_or_path") == "small"
+    assert kwargs.get("device") == "cpu"
+    assert kwargs.get("compute_type") == "int8"
+    assert result[0]["text"] == "안녕"
+
+
+def test_whisper_cli_writes_json(tmp_path):
+    """`python -m workers.whisper_worker <wav> --out <json>` writes a JSON segment list."""
+    out = tmp_path / "segs.json"
+    with patch("workers.whisper_worker.transcribe_local",
+               return_value=[{"start": 0.0, "end": 1.0, "text": "hi", "avg_logprob": -0.1}]):
+        from workers.whisper_worker import main
+        main(["/tmp/test.wav", "--out", str(out), "--language", "ko", "--model", "small"])
+    data = json.loads(out.read_text())
+    assert data == [{"start": 0.0, "end": 1.0, "text": "hi", "avg_logprob": -0.1}]
+
+
+def test_diarize_local_falls_back_to_single_speaker(tmp_path):
+    """When pyannote/torch are unavailable, diarize_local degrades to one speaker
+    covering the whole file so the pipeline can still reach skill extraction."""
+    import wave
+    wav = tmp_path / "a.wav"
+    with wave.open(str(wav), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x00" * 16000 * 3)  # 3 seconds
+
+    def _raise(*a, **k):
+        raise ImportError("pyannote.audio not installed")
+
+    with patch("workers.diarize_worker.Pipeline.from_pretrained", side_effect=_raise):
+        from workers.diarize_worker import diarize_local
+        result = diarize_local(str(wav))
+
+    assert len(result) == 1
+    assert result[0]["speaker"] == "A"
+    assert result[0]["start"] == 0.0
+    assert abs(result[0]["end"] - 3.0) < 0.1
+
+
 def test_download_audio_calls_drive_api():
     mock_service = MagicMock()
     mock_service.files.return_value.get_media.return_value.execute.return_value = b"audio_bytes"
@@ -61,6 +114,22 @@ def test_download_audio_calls_drive_api():
         from tools.sg_drive_download import download_audio
         result = download_audio("file123", "/tmp/audio.m4a", json.dumps({"type": "service_account"}))
     assert result == "/tmp/audio.m4a"
+
+
+def test_drive_download_cli_downloads_and_converts_to_wav(tmp_path):
+    """`python -m tools.sg_drive_download <id> --out x.wav` downloads then ffmpegs to WAV."""
+    out_wav = tmp_path / "audio.wav"
+    with patch("tools.sg_drive_download.download_audio", return_value=str(out_wav) + ".src") as mock_dl, \
+         patch("tools.sg_drive_download.subprocess.run") as mock_run, \
+         patch.dict(os.environ, {"GOOGLE_SERVICE_ACCOUNT_JSON": json.dumps({"type": "service_account"})}):
+        from tools.sg_drive_download import main
+        rc = main(["file123", "--out", str(out_wav)])
+    assert rc == 0
+    mock_dl.assert_called_once()
+    # ffmpeg invoked to produce the wav target
+    ffmpeg_cmd = mock_run.call_args[0][0]
+    assert ffmpeg_cmd[0] == "ffmpeg"
+    assert str(out_wav) in ffmpeg_cmd
 
 
 def test_update_job_status(mock_supabase_client):

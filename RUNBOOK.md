@@ -105,7 +105,28 @@ Commit the regenerated `*.g.dart` files alongside your change.
 
 ---
 
-## 6. Android setup (not yet verified)
+## 6. Fly.io pipeline deployment
+
+The deployable FastAPI pipeline lives in `pipeline/`, including its `Dockerfile`, `fly.toml`, and Python dependency files. Fly deploys must use `pipeline/` as the build working directory.
+
+From the repo root:
+
+```bash
+flyctl deploy pipeline --config fly.toml --remote-only
+```
+
+Or from inside `pipeline/`:
+
+```bash
+cd pipeline
+flyctl deploy --config fly.toml --remote-only
+```
+
+Do not run `flyctl deploy --config pipeline/fly.toml` from the repo root. That reads the config file but still uses the repo root as the build source, so Fly cannot find `pipeline/Dockerfile`.
+
+---
+
+## 7. Android setup (not yet verified)
 
 Android is currently the stock `flutter create` scaffold — never built or run. To enable it later:
 
@@ -120,7 +141,7 @@ App ID is `com.fixli.sorigamis`. Native pieces later plans will need (mic/storag
 
 ---
 
-## 7. Troubleshooting / known gotchas
+## 8. Troubleshooting / known gotchas
 
 **`flutter analyze` complains it can't find `package:flutter_lints/flutter.yaml`.**
 `analysis_options.yaml` includes flutter_lints; make sure `flutter_lints` is in `dev_dependencies` (`flutter pub add dev:flutter_lints`).

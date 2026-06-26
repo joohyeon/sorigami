@@ -32,8 +32,32 @@ def test_launch_hermes_spawns_subprocess():
     mock_popen.assert_called_once()
     cmd = mock_popen.call_args[0][0]
     assert "hermes" in cmd
-    assert "-s" in cmd
-    assert any("sg-orchestrator" in arg for arg in cmd)
     # Ensure daemon monitor thread was started
     mock_thread.assert_called_once()
     assert mock_thread.call_args.kwargs.get("daemon") is True
+
+
+def test_launch_hermes_inlines_orchestrator_skill_into_prompt():
+    """The orchestrator instructions must travel in the -z prompt itself.
+
+    Hermes' -s/--skills flag only *catalogs* a skill by name (progressive
+    disclosure) — it never injects the skill body into the model prompt, and it
+    silently ignores a file path. So the full sg-orchestrator instructions and
+    the job context must both be inlined into the -z prompt for the agent to
+    actually run the pipeline.
+    """
+    from hermes.runner import launch_hermes
+    context_json = '{"job_id":"job-1","drive_file_id":"abc123"}'
+    with patch("subprocess.Popen") as mock_popen, \
+         patch("builtins.open", MagicMock()), \
+         patch("threading.Thread"):
+        mock_popen.return_value = MagicMock(pid=12345)
+        launch_hermes("job-1", context_json)
+    cmd = mock_popen.call_args[0][0]
+    assert "-z" in cmd
+    prompt = cmd[cmd.index("-z") + 1]
+    # Orchestrator skill body is present (not just the name catalog entry)
+    assert "Sorigamis pipeline orchestrator" in prompt
+    assert "Pipeline Stages" in prompt
+    # Job context is carried in the same prompt
+    assert context_json in prompt

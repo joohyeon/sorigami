@@ -1,6 +1,16 @@
 from __future__ import annotations
 import os
-from supabase import create_client
+
+try:
+    from supabase import create_client
+except ImportError:  # pragma: no cover - exercised in test envs without supabase
+    create_client = None  # type: ignore[assignment]
+
+
+def _client():
+    if create_client is None:
+        raise RuntimeError("supabase is not installed")
+    return create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
 
 def update_job_status(
@@ -9,7 +19,7 @@ def update_job_status(
     extra: dict | None = None,
 ) -> None:
     try:
-        client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        client = _client()
         data = {"status": status}
         if extra:
             data.update(extra)
@@ -20,7 +30,7 @@ def update_job_status(
 
 def write_utterances(job_id: str, utterances: list[dict]) -> None:
     try:
-        client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        client = _client()
         rows = [{"job_id": job_id, **u} for u in utterances]
         client.table("sg_utterances").insert(rows).execute()
     except Exception as exc:
@@ -29,7 +39,7 @@ def write_utterances(job_id: str, utterances: list[dict]) -> None:
 
 def write_speakers(job_id: str, speakers: list[dict]) -> None:
     try:
-        client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        client = _client()
         rows = [{"job_id": job_id, **s} for s in speakers]
         client.table("sg_speakers").insert(rows).execute()
     except Exception as exc:
@@ -41,7 +51,7 @@ def write_skill_result(
     output_json: dict, output_markdown: str,
 ) -> None:
     try:
-        client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        client = _client()
         client.table("sg_skill_results").insert({
             "job_id": job_id, "skill_id": skill_id, "skill_name": skill_name,
             "output_json": output_json, "output_markdown": output_markdown,
@@ -57,7 +67,7 @@ def write_action_log(
     fired_at: str | None = None, error: str | None = None,
 ) -> None:
     try:
-        client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
+        client = _client()
         client.table("sg_action_logs").insert({
             "job_id": job_id, "skill_id": skill_id, "action_type": action_type,
             "destination": destination, "payload_json": payload,
