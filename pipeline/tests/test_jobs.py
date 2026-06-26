@@ -29,7 +29,7 @@ def test_create_job(client, mock_supabase):
 
 def test_get_job(client, mock_supabase):
     job_id = str(uuid4())
-    mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
+    mock_supabase.table.return_value.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
         "id": job_id,
         "status": "analyzing",
         "plan_json": None,

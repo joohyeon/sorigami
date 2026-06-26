@@ -2,11 +2,24 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from models import CreateSkillRequest, UpdateSkillRequest
 from supabase_client import get_supabase
+from uuid import UUID as _UUID
 
 router = APIRouter(prefix="/skills", tags=["skills"])
 
+
+def _validate_uuid(val: str | None, param: str) -> None:
+    if val is None:
+        return
+    try:
+        _UUID(val)
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail=f"Invalid UUID for {param}")
+
+
 @router.get("")
 def list_skills(user_id: str | None = None, db=Depends(get_supabase)):
+    _validate_uuid(user_id, "user_id")
     if user_id:
         result = db.table("sg_skills").select("*").or_(f"is_default.eq.true,user_id.eq.{user_id}").execute()
     else:

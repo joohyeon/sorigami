@@ -43,7 +43,7 @@ def create_job(body: CreateJobRequest, db=Depends(get_supabase)):
 
 @router.get("/{job_id}")
 def get_job(job_id: str, db=Depends(get_supabase)):
-    result = db.table("sg_jobs").select("*").eq("id", job_id).single().execute()
+    result = db.table("sg_jobs").select("*").eq("id", job_id).maybe_single().execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Job not found")
     row = result.data

@@ -14,7 +14,13 @@ def _monitor(proc: subprocess.Popen, job_id: str, log_file) -> None:
     proc.wait()
     log_file.close()
     if proc.returncode == 0:
-        update_job_status(job_id, "complete")
+        # Only mark complete if not already in a terminal state
+        from supabase_client import get_supabase
+        client = get_supabase()
+        row = client.table("sg_jobs").select("status").eq("id", job_id).maybe_single().execute()
+        current_status = (row.data or {}).get("status", "")
+        if current_status not in ("complete", "failed"):
+            update_job_status(job_id, "complete")
     else:
         update_job_status(job_id, "failed", {"error": f"hermes exited {proc.returncode}"})
 

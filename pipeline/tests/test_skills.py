@@ -40,6 +40,12 @@ def test_delete_default_skill_forbidden(client, mock_supabase):
     assert response.status_code == 403
 
 def test_list_skills_with_user_id(client, mock_supabase):
+    valid_user_id = str(uuid4())
     mock_supabase.table.return_value.select.return_value.or_.return_value.execute.return_value.data = []
-    response = client.get("/skills?user_id=user-123")
+    response = client.get(f"/skills?user_id={valid_user_id}")
     assert response.status_code == 200
+
+
+def test_list_skills_invalid_uuid(client, mock_supabase):
+    response = client.get("/skills?user_id=not-a-uuid")
+    assert response.status_code == 422
