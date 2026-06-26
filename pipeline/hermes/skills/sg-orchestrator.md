@@ -57,9 +57,28 @@ Execute these stages in order. Write job status to Supabase before and after eac
    failure.** Run it in the background and poll the process until it exits. Do not abort
    it, do not start a second transcription, and do not set the job to `failed` while it
    is still running.
-4. Read `/tmp/sg-job-<job_id>.transcript.json` and write each segment as a row to
-   `sg_utterances` (`job_id`, `start`, `end`, `text`) via `sg-supabase-write`.
-5. Write the full transcript JSON to `sg_transcript_raw`.
+4. Compute quality from the transcript and write it to `sg_jobs`:
+   ```
+   .venv/bin/python -c "
+   import json
+   from tools.sg_quality import compute_quality
+   segs = json.load(open('/tmp/sg-job-<job_id>.transcript.json'))
+   quality = compute_quality(segs)
+   json.dump(quality, open('/tmp/sg-job-<job_id>.quality.json', 'w'))
+   "
+   ```
+   Then write to Supabase:
+   ```
+   .venv/bin/python -c "
+   import json
+   from tools.sg_supabase_write import update_job_status
+   quality = json.load(open('/tmp/sg-job-<job_id>.quality.json'))
+   update_job_status('<job_id>', 'analyzing', extra={'quality_json': quality})
+   "
+   ```
+5. Read `/tmp/sg-job-<job_id>.transcript.json` and write each segment as a row to
+   `sg_utterances` (`job_id`, `start_sec`, `end_sec`, `text`, `avg_logprob`) via `sg-supabase-write`.
+6. Write the full transcript JSON to `sg_transcript_raw`.
 
 ### Stage 2: Diarize
 1. Run diarization locally. If the GPU stack (torch/pyannote) is unavailable it
@@ -75,6 +94,20 @@ Execute these stages in order. Write job status to Supabase before and after eac
 4. Assign each utterance a `speaker_id` by time overlap with the speaker segments,
    resolving the label to its `id` via that map (with a single speaker, every utterance
    gets that speaker's `id`). Update the utterances accordingly.
+5. Update `quality_json` with diarization degradation status:
+   ```
+   .venv/bin/python -c "
+   import json
+   from tools.sg_quality import with_diarization_degraded
+   from tools.sg_supabase_write import update_job_status
+   diarize_segs = json.load(open('/tmp/sg-job-<job_id>.speakers.json'))
+   degraded = any(s.get('degraded') for s in diarize_segs)
+   quality = json.load(open('/tmp/sg-job-<job_id>.quality.json'))
+   quality = with_diarization_degraded(quality, degraded)
+   json.dump(quality, open('/tmp/sg-job-<job_id>.quality.json', 'w'))
+   update_job_status('<job_id>', 'analyzing', extra={'quality_json': quality})
+   "
+   ```
 
 ### Stage 3: Propose Plan
 1. Build a plan listing all approved stages: speaker assignment checkpoint, each skill by name, each integration action by destination
@@ -97,6 +130,31 @@ Execute these stages in order. Write job status to Supabase before and after eac
    b. Call the LLM (yourself) to generate the extraction
    c. Write result to `sg_skill_results` (status=complete, output_markdown + output_json)
 2. Skills with no integration actions can run in parallel
+
+### Stage 5.5: Skill Review Checkpoint (conditional)
+
+For each skill in the approved skills list where `require_review == true`:
+1. Set job status → `awaiting_skill_review` and write the skill result as a checkpoint:
+   ```
+   .venv/bin/python -c "
+   import json
+   from tools.sg_supabase_write import update_job_status
+   checkpoint = {
+       'type': 'skill_review',
+       'skill_name': '<skill_name>',
+       'output_markdown': '<output_markdown from sg_skill_results>',
+       'output_json': <output_json from sg_skill_results>,
+   }
+   update_job_status('<job_id>', 'awaiting_skill_review', extra={'checkpoint_json': checkpoint})
+   "
+   ```
+2. Send FCM push via `sg-notify-fcm` with title "Review [skill_name] before actions fire".
+3. **STOP and wait.** Poll `sg_jobs.status` every 5s. Timeout after 30 minutes → treat as skip (do not fail the job).
+4. On resume: read `checkpoint_json`.
+   - If `{"skipped": true}` — skip all integration actions for this skill; continue to the next skill.
+   - Otherwise — proceed to Stage 6 for this skill's integration actions.
+
+Skills with `require_review == false` skip Stage 5.5 entirely and proceed directly to Stage 6.
 
 ### Stage 6: Integration Action Checkpoints
 For each integration action in each skill:

@@ -86,3 +86,20 @@ def test_launch_hermes_inlines_orchestrator_skill_into_prompt():
     assert "Pipeline Stages" in prompt
     # Job context is carried in the same prompt
     assert context_json in prompt
+
+
+def test_orchestrator_prompt_contains_quality_computation():
+    """The -z prompt must instruct Hermes to compute and write quality after transcription."""
+    from hermes.runner import _build_prompt
+    prompt = _build_prompt('{"job_id":"job-1"}')
+    assert "sg_quality" in prompt
+    assert "quality_json" in prompt
+
+
+def test_orchestrator_prompt_contains_stage_55_skill_review():
+    """The -z prompt must contain the Stage 5.5 skill review checkpoint instructions."""
+    from hermes.runner import _build_prompt
+    prompt = _build_prompt('{"job_id":"job-1"}')
+    assert "awaiting_skill_review" in prompt
+    assert "require_review" in prompt
+    assert "Stage 5.5" in prompt
