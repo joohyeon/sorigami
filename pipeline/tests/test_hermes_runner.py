@@ -22,11 +22,18 @@ def test_build_context_includes_required_fields():
 
 def test_launch_hermes_spawns_subprocess():
     from hermes.runner import launch_hermes
-    with patch("subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(pid=12345)
+    with patch("subprocess.Popen") as mock_popen, \
+         patch("builtins.open", MagicMock()), \
+         patch("threading.Thread") as mock_thread:
+        mock_proc = MagicMock(pid=12345)
+        mock_popen.return_value = mock_proc
+        mock_thread.return_value = MagicMock()
         launch_hermes("job-1", '{"job_id":"job-1"}')
     mock_popen.assert_called_once()
     cmd = mock_popen.call_args[0][0]
     assert "hermes" in cmd
     assert "-s" in cmd
-    assert "sg-orchestrator" in cmd
+    assert any("sg-orchestrator" in arg for arg in cmd)
+    # Ensure daemon monitor thread was started
+    mock_thread.assert_called_once()
+    assert mock_thread.call_args.kwargs.get("daemon") is True

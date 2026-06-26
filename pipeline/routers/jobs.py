@@ -33,7 +33,11 @@ def create_job(body: CreateJobRequest, db=Depends(get_supabase)):
     from hermes.context import build_context
     from hermes.runner import launch_hermes
     context_json = build_context(row, mode, skills)
-    launch_hermes(job_id, context_json)
+    try:
+        launch_hermes(job_id, context_json)
+    except Exception as exc:
+        db.table("sg_jobs").update({"status": "failed", "error": str(exc)}).eq("id", str(job_id)).execute()
+        raise HTTPException(status_code=500, detail=f"Failed to start pipeline: {exc}")
 
     return {"job_id": job_id, "status": row["status"]}
 
