@@ -1,5 +1,6 @@
 from uuid import uuid4
 import pytest
+from unittest.mock import patch, MagicMock
 
 JOB_PAYLOAD = {
     "drive_file_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs",
@@ -9,9 +10,18 @@ JOB_PAYLOAD = {
 
 def test_create_job(client, mock_supabase):
     mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [
-        {"id": "abc-123", "status": "submitted"}
+        {"id": "abc-123", "status": "submitted", "drive_file_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"}
     ]
-    response = client.post("/jobs", json=JOB_PAYLOAD)
+    mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
+        "id": JOB_PAYLOAD["mode_id"], "name": "Test Mode", "skill_ids": []
+    }
+    env = {
+        "SUPABASE_URL": "https://example.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "test-key",
+    }
+    with patch.dict("os.environ", env), patch("subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(pid=99999)
+        response = client.post("/jobs", json=JOB_PAYLOAD)
     assert response.status_code == 201
     body = response.json()
     assert body["status"] == "submitted"

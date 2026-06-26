@@ -7,6 +7,7 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 @router.post("", status_code=201)
 def create_job(body: CreateJobRequest, db=Depends(get_supabase)):
+    # Create job row
     result = db.table("sg_jobs").insert({
         "drive_file_id": body.drive_file_id,
         "mode_id": str(body.mode_id),
@@ -14,7 +15,27 @@ def create_job(body: CreateJobRequest, db=Depends(get_supabase)):
         "status": "submitted",
     }).execute()
     row = result.data[0]
-    return {"job_id": row["id"], "status": row["status"]}
+    job_id = row["id"]
+
+    # Resolve mode + skills
+    mode = db.table("sg_modes").select("*").eq("id", str(body.mode_id)).single().execute().data or {}
+    skill_ids = mode.get("skill_ids", [])
+    skills_data = []
+    if skill_ids:
+        skills_data = db.table("sg_skills").select("*").in_("id", skill_ids).execute().data or []
+
+    skills = [
+        {"skill_name": s["name"], "ai_prompt": s["ai_prompt"], "integration_actions": s.get("integration_actions", [])}
+        for s in skills_data
+    ]
+
+    # Spawn Hermes (non-blocking)
+    from hermes.context import build_context
+    from hermes.runner import launch_hermes
+    context_json = build_context(row, mode, skills)
+    launch_hermes(job_id, context_json)
+
+    return {"job_id": job_id, "status": row["status"]}
 
 @router.get("/{job_id}")
 def get_job(job_id: str, db=Depends(get_supabase)):
