@@ -175,6 +175,33 @@ def test_parse_args_collects_attendees_and_speaker_mappings(tmp_path, monkeypatc
     assert loaded_paths == [env_file]
 
 
+def test_parse_args_default_out_path_is_process_specific_json(monkeypatch):
+    from tests.e2e.sg_validate_team_meeting import parse_args
+
+    monkeypatch.setattr("tests.e2e.sg_validate_team_meeting.load_dotenv", lambda path: None)
+
+    config = parse_args(["--file-id", "drive-1"])
+
+    assert config.out_path != Path("/tmp/sg-team-meeting-e2e.json")
+    assert config.out_path.suffix == ".json"
+    assert str(os.getpid()) in config.out_path.name
+
+
+def test_write_report_uses_owner_only_permissions(tmp_path):
+    from tests.e2e.sg_validate_team_meeting import write_report
+
+    out_path = tmp_path / "report.json"
+
+    write_report(out_path, {"passed": False, "error": "boom"})
+
+    assert json.loads(out_path.read_text(encoding="utf-8")) == {
+        "passed": False,
+        "error": "boom",
+    }
+    if hasattr(os, "stat"):
+        assert out_path.stat().st_mode & 0o777 == 0o600
+
+
 def test_main_writes_report_and_returns_zero_when_report_passed(
     tmp_path, monkeypatch, capsys
 ):
@@ -286,6 +313,44 @@ def test_main_returns_one_when_report_failed(tmp_path, monkeypatch):
     result = validator.main(["--file-id", "drive-1", "--out", str(out_path)])
 
     assert result == 1
+
+
+def test_main_writes_failure_report_when_poll_job_raises(tmp_path, monkeypatch):
+    from tests.e2e import sg_validate_team_meeting as validator
+
+    out_path = tmp_path / "report.json"
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"job_id": "job-1"}
+
+    monkeypatch.setattr(validator, "load_dotenv", lambda path: None)
+    monkeypatch.setattr(validator, "preflight", lambda config: None)
+    monkeypatch.setattr(validator, "create_client", lambda url, key: "db")
+    monkeypatch.setattr(
+        validator,
+        "ensure_team_meeting_mode",
+        lambda db, attendees: ("mode-1", "user-1"),
+    )
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role")
+    monkeypatch.setattr(validator.httpx, "post", lambda url, json, timeout: FakeResponse())
+
+    def raise_poll_job(config, job_id, mode_id):
+        raise RuntimeError("poll failed\nwith detail")
+
+    monkeypatch.setattr(validator, "poll_job", raise_poll_job)
+
+    result = validator.main(["--file-id", "drive-1", "--out", str(out_path)])
+
+    report = json.loads(out_path.read_text(encoding="utf-8"))
+    assert result == 1
+    assert report["passed"] is False
+    assert report["drive_file_id"] == "drive-1"
+    assert report["error"] == "RuntimeError: poll failed with detail"
 
 
 class FakeTableQuery:

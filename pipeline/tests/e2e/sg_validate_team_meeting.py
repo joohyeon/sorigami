@@ -113,6 +113,10 @@ def _parse_speaker(value: str) -> tuple[str, str]:
     return label, name
 
 
+def _default_out_path() -> Path:
+    return Path(f"/tmp/sg-team-meeting-e2e-{os.getpid()}.json")
+
+
 def parse_args(argv=None) -> ValidationConfig:
     parser = argparse.ArgumentParser(description="Run the Sorigamis Team Meeting E2E validator")
     parser.add_argument("--file-id", required=True)
@@ -121,7 +125,7 @@ def parse_args(argv=None) -> ValidationConfig:
     parser.add_argument("--attendee", action="append", default=[])
     parser.add_argument("--send-email", action="store_true")
     parser.add_argument("--speaker", action="append", type=_parse_speaker, default=[])
-    parser.add_argument("--out", default="/tmp/sg-team-meeting-e2e.json")
+    parser.add_argument("--out", default=str(_default_out_path()))
     args = parser.parse_args(argv)
 
     load_dotenv(Path(args.env_file))
@@ -486,30 +490,63 @@ def _create_supabase_client():
     )
 
 
+def _sanitize_error(exc: Exception) -> str:
+    message = str(exc).replace("\r", " ").replace("\n", " ")
+    return f"{type(exc).__name__}: {message}"[:1000]
+
+
+def write_report(path: Path, report: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+
+    fd = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as report_file:
+            json.dump(report, report_file, ensure_ascii=False, indent=2)
+            report_file.write("\n")
+            fd = -1
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def _print_report(report: dict) -> None:
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
 def main(argv=None) -> int:
     config = parse_args(argv)
-    preflight(config)
-    db = _create_supabase_client()
-    mode_id, user_id = ensure_team_meeting_mode(db, config.attendees)
+    try:
+        preflight(config)
+        db = _create_supabase_client()
+        mode_id, user_id = ensure_team_meeting_mode(db, config.attendees)
 
-    response = httpx.post(
-        f"{config.server_url}/jobs",
-        json={
+        response = httpx.post(
+            f"{config.server_url}/jobs",
+            json={
+                "drive_file_id": config.file_id,
+                "mode_id": mode_id,
+                "user_id": user_id,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        job_id = response.json()["job_id"]
+
+        report = poll_job(config, job_id, mode_id)
+    except Exception as exc:
+        report = {
+            "passed": False,
             "drive_file_id": config.file_id,
-            "mode_id": mode_id,
-            "user_id": user_id,
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
-    job_id = response.json()["job_id"]
+            "error": _sanitize_error(exc),
+        }
 
-    report = poll_job(config, job_id, mode_id)
-    output = json.dumps(report, ensure_ascii=False, indent=2)
     if config.out_path is not None:
-        config.out_path.parent.mkdir(parents=True, exist_ok=True)
-        config.out_path.write_text(f"{output}\n", encoding="utf-8")
-    print(output)
+        write_report(config.out_path, report)
+    _print_report(report)
     return 0 if report["passed"] else 1
 
 
