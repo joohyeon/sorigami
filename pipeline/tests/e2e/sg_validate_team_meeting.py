@@ -279,7 +279,8 @@ def checkpoint_response(
 
     if checkpoint_type == "action_confirmation":
         action = checkpoint.get("action") or {}
-        if action.get("type") == "email" and send_email:
+        action_type = checkpoint.get("action_type") or action.get("type")
+        if action_type == "email" and send_email:
             return {"approved": True}
         return {"skipped": True}
 
@@ -357,7 +358,7 @@ def poll_job(config: ValidationConfig, job_id: str, mode_id: str) -> dict:
     speaker_names = _speaker_mapping(config.speakers)
     max_attempts = 40
 
-    for _ in range(max_attempts):
+    for attempt in range(max_attempts):
         response = httpx.get(f"{base_url}/jobs/{job_id}", timeout=30)
         response.raise_for_status()
         job_info = response.json()
@@ -418,7 +419,8 @@ def poll_job(config: ValidationConfig, job_id: str, mode_id: str) -> dict:
                 "error": job_info.get("error") or "job failed",
             }
 
-        time.sleep(15)
+        if attempt < max_attempts - 1:
+            time.sleep(15)
 
     return {
         "passed": False,

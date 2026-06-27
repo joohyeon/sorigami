@@ -414,12 +414,19 @@ def test_checkpoint_response_only_approves_email_action_when_send_email_enabled(
     from tests.e2e.sg_validate_team_meeting import checkpoint_response
 
     email_checkpoint = {"type": "action_confirmation", "action": {"type": "email"}}
+    flat_email_checkpoint = {"type": "action_confirmation", "action_type": "email"}
     webhook_checkpoint = {"type": "action_confirmation", "action": {"type": "webhook"}}
 
     assert checkpoint_response(email_checkpoint, speakers={}, send_email=True) == {
         "approved": True
     }
+    assert checkpoint_response(flat_email_checkpoint, speakers={}, send_email=True) == {
+        "approved": True
+    }
     assert checkpoint_response(email_checkpoint, speakers={}, send_email=False) == {
+        "skipped": True
+    }
+    assert checkpoint_response(flat_email_checkpoint, speakers={}, send_email=False) == {
         "skipped": True
     }
     assert checkpoint_response(webhook_checkpoint, speakers={}, send_email=True) == {
@@ -589,3 +596,43 @@ def test_poll_job_returns_failed_report_on_job_failure(monkeypatch):
     assert report["passed"] is False
     assert report["error"] == "boom"
     assert report["timeline"] == [{"status": "failed", "checkpoint": None}]
+
+
+def test_poll_job_does_not_sleep_after_final_timeout_attempt(monkeypatch):
+    from tests.e2e.sg_validate_team_meeting import ValidationConfig, poll_job
+
+    config = ValidationConfig(
+        file_id="drive-file",
+        server_url="http://validator.test",
+        attendees=[],
+        send_email=False,
+        speakers=[],
+        out_path=None,
+    )
+    sleeps = []
+    poll_count = 0
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            nonlocal poll_count
+            poll_count += 1
+            return {"job_id": "job-1", "status": "executing"}
+
+    monkeypatch.setattr(
+        "tests.e2e.sg_validate_team_meeting.httpx.get",
+        lambda url, timeout: FakeResponse(),
+    )
+    monkeypatch.setattr(
+        "tests.e2e.sg_validate_team_meeting.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    report = poll_job(config, job_id="job-1", mode_id="mode-1")
+
+    assert report["passed"] is False
+    assert report["error"] == "timeout"
+    assert poll_count == 40
+    assert sleeps == [15] * 39
