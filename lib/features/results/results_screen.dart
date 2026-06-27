@@ -56,7 +56,16 @@ class _QualityCardState extends State<_QualityCard> {
 
   @override
   Widget build(BuildContext context) {
-    final score = widget.quality['transcript_score'] as String? ?? 'good';
+    if (widget.quality.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(12),
+          child: Text('Quality data unavailable'),
+        ),
+      );
+    }
+
+    final score = widget.quality['transcript_score'] as String? ?? 'poor';
     final degraded = widget.quality['diarization_degraded'] as bool? ?? false;
     final lowCount = widget.quality['low_confidence_count'] as int? ?? 0;
     final lowSegs = (widget.quality['low_confidence_segments'] as List?)

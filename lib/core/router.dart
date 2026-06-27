@@ -3,6 +3,7 @@ import '../features/recordings/recordings_screen.dart';
 import '../features/results/results_screen.dart';
 import '../features/skills/skill_editor_screen.dart';
 import '../features/pipeline/skill_review_screen.dart';
+import '../data/api/pipeline_client.dart';
 
 final appRouter = GoRouter(
   routes: [
@@ -15,11 +16,19 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/jobs/:id/skill-review',
       builder: (context, state) {
+        final jobId = state.pathParameters['id']!;
         final checkpoint = state.extra as Map<String, dynamic>? ?? {};
+        final client = PipelineClient();
         return SkillReviewScreen(
           checkpoint: checkpoint,
-          onApprove: () => context.pop(),
-          onSkip: () => context.pop(),
+          onApprove: () async {
+            await client.resolveCheckpoint(jobId, skipped: false);
+            context.pop();
+          },
+          onSkip: () async {
+            await client.resolveCheckpoint(jobId, skipped: true);
+            context.pop();
+          },
         );
       },
     ),

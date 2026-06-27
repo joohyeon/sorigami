@@ -1,7 +1,10 @@
 from __future__ import annotations
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from models import CreateJobRequest, ConfirmJobRequest, CheckpointRequest
 from supabase_client import get_supabase
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -58,8 +61,9 @@ def create_job(body: CreateJobRequest, db=Depends(get_supabase)):
     context_json = build_context(row, mode, skills)
     try:
         launch_hermes(job_id, context_json)
-    except Exception:
-        db.table("sg_jobs").update({"status": "failed", "error": "pipeline failed to start"}).eq("id", job_id).execute()
+    except Exception as exc:
+        logger.error("launch_hermes failed for job %s: %s", job_id, exc, exc_info=True)
+        db.table("sg_jobs").update({"status": "failed", "error": f"pipeline failed to start: {exc}"}).eq("id", job_id).execute()
         raise HTTPException(status_code=500, detail="Failed to start pipeline")
 
     return {"job_id": job_id, "status": row["status"]}
@@ -76,6 +80,7 @@ def get_job(job_id: str, db=Depends(get_supabase)):
         "status": row["status"],
         "plan": row.get("plan_json"),
         "checkpoint": row.get("checkpoint_json"),
+        "quality": row.get("quality_json"),
         "error": row.get("error"),
     }
 

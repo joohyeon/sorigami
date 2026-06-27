@@ -32,6 +32,16 @@ void main() {
     await db.close();
   });
 
+  testWidgets('shows error when skill id is not found', (tester) async {
+    final db = _db();
+    await tester.pumpWidget(_wrap(db, 'nonexistent-id'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Skill not found.'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    await db.close();
+  });
+
   testWidgets('toggling require_review saves to Drift', (tester) async {
     final db = _db();
     await db.skillDao.insertSkill(SkillsCompanion.insert(

@@ -38,6 +38,7 @@ def test_get_job(client, mock_supabase):
         "status": "analyzing",
         "plan_json": None,
         "checkpoint_json": None,
+        "quality_json": None,
     }
     response = client.get(f"/jobs/{job_id}")
     assert response.status_code == 200
@@ -46,6 +47,23 @@ def test_get_job(client, mock_supabase):
     assert body["status"] == "analyzing"
     assert body["plan"] is None
     assert body["checkpoint"] is None
+    assert "quality" in body
+
+
+def test_get_job_includes_quality_json(client, mock_supabase):
+    """quality_json written by Hermes must be exposed in the GET /jobs/:id response."""
+    job_id = str(uuid4())
+    quality = {"transcript_score": "good", "avg_logprob": -0.4}
+    mock_supabase.table.return_value.select.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "id": job_id,
+        "status": "complete",
+        "plan_json": None,
+        "checkpoint_json": None,
+        "quality_json": quality,
+    }
+    response = client.get(f"/jobs/{job_id}")
+    assert response.status_code == 200
+    assert response.json()["quality"] == quality
 
 
 def test_get_job_results(client, mock_supabase):

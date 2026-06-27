@@ -53,4 +53,10 @@ void main() {
     await tester.pumpWidget(_wrap(_goodQuality));
     expect(find.text('0 low-confidence segments'), findsNothing);
   });
+
+  testWidgets('shows unavailable message when qualityJson is empty', (tester) async {
+    await tester.pumpWidget(_wrap({}));
+    expect(find.text('Quality data unavailable'), findsOneWidget);
+    expect(find.text('Good'), findsNothing);
+  });
 }

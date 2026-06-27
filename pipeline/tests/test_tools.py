@@ -367,3 +367,26 @@ def test_with_diarization_degraded():
     assert updated["diarization_degraded"] is True
     # Original not mutated
     assert q["diarization_degraded"] is False
+
+
+def test_compute_quality_boundary_good_to_fair():
+    """avg_logprob exactly -0.5 is still 'good' (>= -0.5)."""
+    from tools.sg_quality import compute_quality
+    segments = [{"start": 0.0, "end": 1.0, "text": "a", "avg_logprob": -0.5}]
+    assert compute_quality(segments)["transcript_score"] == "good"
+
+
+def test_compute_quality_boundary_fair_to_poor():
+    """avg_logprob exactly -0.8 is still 'fair' (>= -0.8)."""
+    from tools.sg_quality import compute_quality
+    segments = [{"start": 0.0, "end": 1.0, "text": "a", "avg_logprob": -0.8}]
+    assert compute_quality(segments)["transcript_score"] == "fair"
+
+
+def test_compute_quality_require_review_false_path():
+    """require_review flag on skill context does not affect quality computation."""
+    from tools.sg_quality import compute_quality
+    segments = [{"start": 0.0, "end": 1.0, "text": "hi", "avg_logprob": -0.4}]
+    q = compute_quality(segments)
+    assert q["transcript_score"] == "good"
+    assert "require_review" not in q
