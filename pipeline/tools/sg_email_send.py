@@ -34,7 +34,7 @@ def send_email(recipients: list[str], subject: str, body_markdown: str) -> dict:
         smtp.login(config["username"], config["password"])
         smtp.send_message(message)
     except Exception as exc:
-        raise RuntimeError(f"SMTP send failed: {_sanitize_error(exc, config['password'])}") from exc
+        raise RuntimeError(f"SMTP send failed: {_sanitize_error(exc, config['password'])}") from None
     finally:
         if smtp is not None:
             try:

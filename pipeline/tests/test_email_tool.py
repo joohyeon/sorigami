@@ -1,4 +1,5 @@
 import os
+import traceback
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -60,6 +61,21 @@ def test_send_email_redacts_password_from_smtp_errors():
 
     assert "secret-password" not in str(err.value)
     assert "[redacted]" in str(err.value)
+
+
+def test_send_email_redacts_password_from_formatted_traceback():
+    smtp = MagicMock()
+    smtp.login.side_effect = RuntimeError("bad password secret-password")
+    with patch.dict(os.environ, SMTP_ENV, clear=True), \
+         patch("tools.sg_email_send.smtplib.SMTP", return_value=smtp):
+        from tools.sg_email_send import send_email
+
+        with pytest.raises(RuntimeError) as err:
+            send_email(["alice@example.com"], "Subject", "Body")
+
+    formatted = "".join(traceback.format_exception(err.value))
+    assert "secret-password" not in formatted
+    assert "[redacted]" in formatted
 
 
 def test_send_email_can_disable_starttls_for_local_smtp():
