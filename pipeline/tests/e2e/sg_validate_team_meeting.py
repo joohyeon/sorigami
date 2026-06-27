@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import secrets
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,14 @@ BASE_ENV = (
     "HERMES_MODEL",
 )
 SMTP_ENV = ("SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM")
+SECRET_ENV = (
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "GOOGLE_SERVICE_ACCOUNT_JSON",
+    "SMTP_PASSWORD",
+    "SMTP_USERNAME",
+    "SMTP_FROM",
+    "SMTP_HOST",
+)
 EXPECTED_SKILLS = [
     "Meeting Summary",
     "Action Items",
@@ -73,6 +82,7 @@ class ValidationConfig:
     send_email: bool
     speakers: list[tuple[str, str]] | list[str]
     out_path: Path | None
+    out_path_explicit: bool = False
 
 
 def load_dotenv(path: Path) -> dict[str, str]:
@@ -114,10 +124,15 @@ def _parse_speaker(value: str) -> tuple[str, str]:
 
 
 def _default_out_path() -> Path:
-    return Path(f"/tmp/sg-team-meeting-e2e-{os.getpid()}.json")
+    return Path(f"/tmp/sg-team-meeting-e2e-{uuid4()}.json")
+
+
+def _has_explicit_out(argv: list[str]) -> bool:
+    return any(arg == "--out" or arg.startswith("--out=") for arg in argv)
 
 
 def parse_args(argv=None) -> ValidationConfig:
+    raw_args = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description="Run the Sorigamis Team Meeting E2E validator")
     parser.add_argument("--file-id", required=True)
     parser.add_argument("--server-url", default="http://localhost:8080")
@@ -126,7 +141,7 @@ def parse_args(argv=None) -> ValidationConfig:
     parser.add_argument("--send-email", action="store_true")
     parser.add_argument("--speaker", action="append", type=_parse_speaker, default=[])
     parser.add_argument("--out", default=str(_default_out_path()))
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_args)
 
     load_dotenv(Path(args.env_file))
 
@@ -137,6 +152,7 @@ def parse_args(argv=None) -> ValidationConfig:
         send_email=args.send_email,
         speakers=args.speaker,
         out_path=Path(args.out),
+        out_path_explicit=_has_explicit_out(raw_args),
     )
 
 
@@ -491,13 +507,22 @@ def _create_supabase_client():
 
 
 def _sanitize_error(exc: Exception) -> str:
-    message = str(exc).replace("\r", " ").replace("\n", " ")
+    message = str(exc)
+    secret_values = [
+        os.environ[key]
+        for key in SECRET_ENV
+        if os.environ.get(key)
+    ]
+    for value in sorted(secret_values, key=len, reverse=True):
+        message = message.replace(value, "[redacted]")
+    message = message.replace("\r", " ").replace("\n", " ")
     return f"{type(exc).__name__}: {message}"[:1000]
 
 
-def write_report(path: Path, report: dict) -> None:
+def write_report(path: Path, report: dict, *, exclusive: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    flags = os.O_WRONLY | os.O_CREAT
+    flags |= os.O_EXCL if exclusive else os.O_TRUNC
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
 
@@ -545,7 +570,7 @@ def main(argv=None) -> int:
         }
 
     if config.out_path is not None:
-        write_report(config.out_path, report)
+        write_report(config.out_path, report, exclusive=not config.out_path_explicit)
     _print_report(report)
     return 0 if report["passed"] else 1
 

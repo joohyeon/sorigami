@@ -175,16 +175,18 @@ def test_parse_args_collects_attendees_and_speaker_mappings(tmp_path, monkeypatc
     assert loaded_paths == [env_file]
 
 
-def test_parse_args_default_out_path_is_process_specific_json(monkeypatch):
+def test_parse_args_default_out_path_is_random_json(monkeypatch):
     from tests.e2e.sg_validate_team_meeting import parse_args
 
     monkeypatch.setattr("tests.e2e.sg_validate_team_meeting.load_dotenv", lambda path: None)
 
-    config = parse_args(["--file-id", "drive-1"])
+    first = parse_args(["--file-id", "drive-1"])
+    second = parse_args(["--file-id", "drive-1"])
 
-    assert config.out_path != Path("/tmp/sg-team-meeting-e2e.json")
-    assert config.out_path.suffix == ".json"
-    assert str(os.getpid()) in config.out_path.name
+    assert first.out_path != Path("/tmp/sg-team-meeting-e2e.json")
+    assert first.out_path != second.out_path
+    assert first.out_path.suffix == ".json"
+    assert second.out_path.suffix == ".json"
 
 
 def test_write_report_uses_owner_only_permissions(tmp_path):
@@ -200,6 +202,18 @@ def test_write_report_uses_owner_only_permissions(tmp_path):
     }
     if hasattr(os, "stat"):
         assert out_path.stat().st_mode & 0o777 == 0o600
+
+
+def test_write_report_exclusive_refuses_to_overwrite_existing_file(tmp_path):
+    from tests.e2e.sg_validate_team_meeting import write_report
+
+    out_path = tmp_path / "report.json"
+    out_path.write_text("existing", encoding="utf-8")
+
+    with pytest.raises(FileExistsError):
+        write_report(out_path, {"passed": False}, exclusive=True)
+
+    assert out_path.read_text(encoding="utf-8") == "existing"
 
 
 def test_main_writes_report_and_returns_zero_when_report_passed(
@@ -351,6 +365,34 @@ def test_main_writes_failure_report_when_poll_job_raises(tmp_path, monkeypatch):
     assert report["passed"] is False
     assert report["drive_file_id"] == "drive-1"
     assert report["error"] == "RuntimeError: poll failed with detail"
+
+
+def test_main_failure_report_redacts_secret_from_exception(
+    tmp_path, monkeypatch, capsys
+):
+    from tests.e2e import sg_validate_team_meeting as validator
+
+    out_path = tmp_path / "report.json"
+    secret = "service-role-secret"
+
+    monkeypatch.setattr(validator, "load_dotenv", lambda path: None)
+    monkeypatch.setattr(validator, "preflight", lambda config: None)
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", secret)
+
+    def raise_create_client():
+        raise RuntimeError(f"auth failed for {secret}\nretry denied")
+
+    monkeypatch.setattr(validator, "_create_supabase_client", raise_create_client)
+
+    result = validator.main(["--file-id", "drive-1", "--out", str(out_path)])
+
+    report = json.loads(out_path.read_text(encoding="utf-8"))
+    stdout_report = json.loads(capsys.readouterr().out)
+    assert result == 1
+    assert secret not in report["error"]
+    assert secret not in stdout_report["error"]
+    assert "[redacted]" in report["error"]
+    assert "\n" not in report["error"]
 
 
 class FakeTableQuery:
