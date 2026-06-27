@@ -692,6 +692,16 @@ def test_checkpoint_response_only_approves_email_action_when_send_email_enabled(
     }
 
 
+def test_checkpoint_response_skips_unknown_checkpoint_types():
+    from tests.e2e.sg_validate_team_meeting import checkpoint_response
+
+    assert checkpoint_response(
+        {"type": "new_unknown_checkpoint"},
+        speakers={},
+        send_email=True,
+    ) == {"skipped": True}
+
+
 def _skill_result(name, output="done"):
     return {"skill_name": name, "output_markdown": output}
 

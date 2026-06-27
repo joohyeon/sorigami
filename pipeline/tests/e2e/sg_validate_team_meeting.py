@@ -340,7 +340,7 @@ def checkpoint_response(
             return {"approved": True}
         return {"skipped": True}
 
-    return {"approved": True}
+    return {"skipped": True}
 
 
 def _result_output_is_present(result: dict) -> bool:
