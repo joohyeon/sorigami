@@ -139,12 +139,13 @@ Start the server:
 
 ```bash
 cd pipeline
-uv run uvicorn main:app --port 8080
+set -a; source .env; set +a; uv run uvicorn main:app --port 8080
 ```
 
-Run the validator:
+In a second terminal, run the validator from `pipeline/` so the script path and default `.env` loading use the expected working directory:
 
 ```bash
+cd pipeline
 uv run python tests/e2e/sg_validate_team_meeting.py --file-id <drive_file_id> --server-url http://localhost:8080 --attendee your-test-email@example.com --send-email --out /tmp/sg-team-meeting-e2e.json
 ```
 
