@@ -27,8 +27,6 @@ SECRET_ENV = (
     "GOOGLE_SERVICE_ACCOUNT_JSON",
     "SMTP_PASSWORD",
     "SMTP_USERNAME",
-    "SMTP_FROM",
-    "SMTP_HOST",
 )
 EXPECTED_SKILLS = [
     "Meeting Summary",
@@ -209,6 +207,11 @@ def _users_from_response(value) -> list:
     except TypeError:
         pass
 
+    print(
+        f"Warning: could not extract user list from Supabase response "
+        f"type {type(value).__name__!r}; treating as empty",
+        file=sys.stderr,
+    )
     return []
 
 
@@ -555,9 +558,9 @@ def write_report(path: Path, report: dict, *, exclusive: bool = False) -> None:
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as report_file:
+            fd = -1  # fdopen took ownership; finally must not close it
             json.dump(report, report_file, ensure_ascii=False, indent=2)
             report_file.write("\n")
-            fd = -1
     finally:
         if fd >= 0:
             os.close(fd)
@@ -569,6 +572,8 @@ def _print_report(report: dict) -> None:
 
 def main(argv=None) -> int:
     config = parse_args(argv)
+    job_id = None
+    mode_id = None
     try:
         preflight(config)
         db = _create_supabase_client()
@@ -597,10 +602,20 @@ def main(argv=None) -> int:
             "drive_file_id": config.file_id,
             "error": _sanitize_error(exc),
         }
+        if job_id is not None:
+            report["job_id"] = job_id
+        if mode_id is not None:
+            report["mode_id"] = mode_id
 
-    if config.out_path is not None:
-        write_report(config.out_path, report, exclusive=not config.out_path_explicit)
     _print_report(report)
+    if config.out_path is not None:
+        try:
+            write_report(config.out_path, report, exclusive=not config.out_path_explicit)
+        except OSError as exc:
+            print(
+                f"Warning: could not write report to {config.out_path}: {exc}",
+                file=sys.stderr,
+            )
     return 0 if report["passed"] else 1
 
 
