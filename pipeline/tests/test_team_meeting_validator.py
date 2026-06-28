@@ -231,6 +231,23 @@ def test_write_report_exclusive_refuses_to_overwrite_existing_file(tmp_path):
     assert out_path.read_text(encoding="utf-8") == "existing"
 
 
+def test_write_report_refuses_symlink_target(tmp_path):
+    if not hasattr(os, "O_NOFOLLOW"):
+        pytest.skip("O_NOFOLLOW not available on this platform")
+
+    real_file = tmp_path / "real.json"
+    real_file.write_text("original")
+    symlink = tmp_path / "link.json"
+    symlink.symlink_to(real_file)
+
+    from tests.e2e.sg_validate_team_meeting import write_report
+
+    with pytest.raises(OSError):
+        write_report(symlink, {"passed": False})
+
+    assert real_file.read_text() == "original"
+
+
 def test_main_writes_report_and_returns_zero_when_report_passed(
     tmp_path, monkeypatch, capsys
 ):
@@ -814,6 +831,86 @@ def test_build_report_passes_when_expected_skills_exist_and_email_action_fired()
     assert report["skill_results"] == results["skill_results"]
     assert report["action_logs"] == results["action_logs"]
     assert report["email_action_status"] == "fired"
+
+
+def test_build_report_fails_when_skill_missing():
+    from tests.e2e.sg_validate_team_meeting import build_report
+
+    # Only 3 of 4 expected skills present
+    skill_results = [
+        {"skill_name": "Meeting Summary", "output_markdown": "Summary text"},
+        {"skill_name": "Action Items", "output_markdown": "- Do thing"},
+        {"skill_name": "Decision Log", "output_markdown": "Decided X"},
+        # "Meeting Follow-up Email" missing
+    ]
+    report = build_report(
+        job_id="job-1",
+        file_id="file-1",
+        mode_id="mode-1",
+        timeline=[],
+        results={"skill_results": skill_results, "action_logs": []},
+        send_email=False,
+    )
+    assert report["passed"] is False
+    assert "Meeting Follow-up Email" in report["missing_skills"]
+
+
+def test_build_report_fails_when_email_action_missing_and_send_email_true():
+    from tests.e2e.sg_validate_team_meeting import build_report, EXPECTED_SKILLS
+
+    skill_results = [
+        {"skill_name": name, "output_markdown": "Some content"}
+        for name in EXPECTED_SKILLS
+    ]
+    report = build_report(
+        job_id="job-1",
+        file_id="file-1",
+        mode_id="mode-1",
+        timeline=[],
+        results={"skill_results": skill_results, "action_logs": []},
+        send_email=True,
+    )
+    assert report["passed"] is False
+    assert report["email_action_status"] == "missing"
+
+
+def test_build_report_fails_when_skill_output_empty():
+    from tests.e2e.sg_validate_team_meeting import build_report, EXPECTED_SKILLS
+
+    skill_results = [
+        {"skill_name": name, "output_markdown": ""}
+        for name in EXPECTED_SKILLS
+    ]
+    report = build_report(
+        job_id="job-1",
+        file_id="file-1",
+        mode_id="mode-1",
+        timeline=[],
+        results={"skill_results": skill_results, "action_logs": []},
+        send_email=False,
+    )
+    assert report["passed"] is False
+    assert len(report["missing_skills"]) == len(EXPECTED_SKILLS)
+
+
+def test_build_report_passes_without_email_when_send_email_false():
+    from tests.e2e.sg_validate_team_meeting import build_report, EXPECTED_SKILLS
+
+    skill_results = [
+        {"skill_name": name, "output_markdown": "Some content"}
+        for name in EXPECTED_SKILLS
+    ]
+    report = build_report(
+        job_id="job-1",
+        file_id="file-1",
+        mode_id="mode-1",
+        timeline=[],
+        results={"skill_results": skill_results, "action_logs": []},
+        send_email=False,
+    )
+    assert report["passed"] is True
+    assert report["email_action_status"] == "skipped"
+    assert report["missing_skills"] == []
 
 
 def test_poll_job_completes_after_confirming_plan_and_checkpoints(monkeypatch):

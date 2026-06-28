@@ -48,7 +48,7 @@ Transcription and diarization are provided as **deterministic local CLIs** — r
 Execute these stages in order. Write job status to Supabase before and after each stage.
 
 ### Stage 1: Download & Transcribe
-1. Set job status → `analyzing` (via `sg-supabase-write`).
+1. Set job status → `analyzing` (via `tools.sg_supabase_write`).
 2. Download the Drive audio and convert it to WAV:
    ```
    .venv/bin/python -m tools.sg_drive_download <drive_file_id> --out /tmp/sg-job-<job_id>.wav
@@ -82,7 +82,7 @@ Execute these stages in order. Write job status to Supabase before and after eac
    "
    ```
 5. Read `/tmp/sg-job-<job_id>.transcript.json` and write each segment as a row to
-   `sg_utterances` (`job_id`, `start_sec`, `end_sec`, `text`, `avg_logprob`) via `sg-supabase-write`.
+   `sg_utterances` (`job_id`, `start_sec`, `end_sec`, `text`, `avg_logprob`) via `tools.sg_supabase_write`.
 6. Write the full transcript JSON to `sg_transcript_raw`.
 
 ### Stage 2: Diarize

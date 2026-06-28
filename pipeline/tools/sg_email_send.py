@@ -75,4 +75,4 @@ def _sanitize_error(exc: Exception, password: str) -> str:
     message = str(exc)
     if password:
         message = message.replace(password, "[redacted]")
-    return message
+    return f"{type(exc).__name__}: {message}"
