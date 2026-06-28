@@ -88,3 +88,20 @@ def test_send_email_can_disable_starttls_for_local_smtp():
 
     smtp.starttls.assert_not_called()
     smtp.send_message.assert_called_once()
+
+
+def test_send_email_raises_when_recipients_empty():
+    with patch.dict(os.environ, SMTP_ENV, clear=True):
+        from tools.sg_email_send import send_email
+
+        with pytest.raises(RuntimeError, match="recipient"):
+            send_email([], "Subject", "Body")
+
+
+def test_send_email_raises_when_smtp_port_not_integer():
+    bad_env = {**SMTP_ENV, "SMTP_PORT": "not-a-number"}
+    with patch.dict(os.environ, bad_env, clear=True):
+        from tools.sg_email_send import send_email
+
+        with pytest.raises(RuntimeError, match="integer"):
+            send_email(["alice@example.com"], "Subject", "Body")
