@@ -103,3 +103,25 @@ def test_orchestrator_prompt_contains_stage_55_skill_review():
     assert "awaiting_skill_review" in prompt
     assert "require_review" in prompt
     assert "Stage 5.5" in prompt
+
+
+def test_orchestrator_prompt_contains_email_action_instructions():
+    """Stage 6 must explain how Hermes confirms and fires email actions."""
+    from hermes.runner import _build_prompt
+
+    prompt = _build_prompt('{"job_id":"job-1"}')
+
+    assert "sg_email_send" in prompt
+    assert "recipients=" in prompt
+    assert "send_email(to=" not in prompt
+    assert "action_type\": \"email\"" in prompt
+    assert "Meeting Follow-up Email" in prompt
+    assert "SMTP" in prompt
+    assert "plan_json.overrides" in prompt
+    assert "per_step_overrides" not in prompt
+    assert "send_fcm(device_token, title, body, creds_json)" in prompt
+    assert "subject from the integration action config" in prompt
+    assert "fallback to \"Team Meeting follow-up\"" in prompt
+    assert "<subject_from_integration_action_config_or_default>" in prompt
+    assert "\"subject\": \"Team Meeting follow-up\"" not in prompt
+    assert 'subject=\\"Team Meeting follow-up\\"' not in prompt

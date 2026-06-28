@@ -84,6 +84,7 @@ docs/research/
 
 # Local Superpowers/SDD notes
 .superpowers/
+.worktrees/
 
 # Local agent instructions
 AGENTS.md
